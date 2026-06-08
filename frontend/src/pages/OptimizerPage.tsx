@@ -10,6 +10,7 @@ import OptimizationResult from '../components/Optimizer/OptimizationResult'
 import useTokenizer from '../hooks/useTokenizer'
 
 import { optimizePrompt } from '../utils/optimizerApi'
+import TokenHeatmap from '../components/TokenVisualiser/TokenHeatmap'
 
 export default function OptimizerPage() {
   const [prompt, setPrompt] = useState('')
@@ -62,6 +63,7 @@ export default function OptimizerPage() {
           value={prompt}
           onChange={setPrompt}
         />
+        <TokenHeatmap text={prompt} />
 
         <button
           className="primary-button"
