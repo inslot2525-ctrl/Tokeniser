@@ -459,3 +459,91 @@
 		0.18
 	);
 }
+
+/* ==========================
+   BUDGET PLANNER
+========================== */
+
+.planner-card {
+	padding: 24px;
+
+	margin-top: 24px;
+}
+
+.planner-card h2 {
+	margin-bottom: 20px;
+}
+
+.planner-grid {
+	display: grid;
+
+	grid-template-columns:
+		repeat(
+			auto-fit,
+			minmax(220px, 1fr)
+		);
+
+	gap: 20px;
+}
+
+.planner-metric {
+	padding: 20px;
+
+	border-radius: 12px;
+
+	text-align: center;
+
+	background: rgba(
+		255,
+		255,
+		255,
+		0.04
+	);
+}
+
+.planner-metric h3 {
+	font-size: 32px;
+
+	color: var(
+		--accent-primary
+	);
+
+	margin-bottom: 10px;
+}
+
+.planner-metric p {
+	color: var(
+		--text-secondary
+	);
+}
+
+.model-selector {
+	padding: 16px;
+
+	display: flex;
+
+	flex-direction: column;
+
+	gap: 10px;
+}
+
+.model-selector select {
+	padding: 12px;
+
+	border-radius: 12px;
+
+	background: rgba(
+		255,
+		255,
+		255,
+		0.08
+	);
+
+	color: white;
+
+	border: 1px solid var(--border-color);
+}
+
+.model-selector option {
+	background: #0f172a;
+}

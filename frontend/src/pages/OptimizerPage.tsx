@@ -6,14 +6,21 @@ import PromptEditor from '../components/Editor/PromptEditor'
 import TokenCounter from '../components/Editor/TokenCounter'
 
 import OptimizationResult from '../components/Optimizer/OptimizationResult'
+import TokenHeatmap from '../components/TokenVisualiser/TokenHeatmap'
+import BudgetPlanner from '../components/Dashboard/BudgetPlanner'
+import ModelSelector from '../components/Layout/ModelSelector'
 
 import useTokenizer from '../hooks/useTokenizer'
 
 import { optimizePrompt } from '../utils/optimizerApi'
-import TokenHeatmap from '../components/TokenVisualiser/TokenHeatmap'
+import { models } from '../data/modelLimits'
+import type { ModelName } from '../data/modelLimits'
 
 export default function OptimizerPage() {
   const [prompt, setPrompt] = useState('')
+
+  const [selectedModel, setSelectedModel] =
+    useState<ModelName>('gpt-4o')
 
   const [result, setResult] =
     useState<any>(null)
@@ -55,14 +62,21 @@ export default function OptimizerPage() {
             color: 'var(--text-secondary)',
           }}
         >
-          Compress prompts to reduce token
-          usage.
+          Compress prompts to reduce token usage.
         </p>
+
+        <div style={{ marginTop: '20px' }}>
+          <ModelSelector
+            selectedModel={selectedModel}
+            onChange={setSelectedModel}
+          />
+        </div>
 
         <PromptEditor
           value={prompt}
           onChange={setPrompt}
         />
+
         <TokenHeatmap text={prompt} />
 
         <button
@@ -76,7 +90,26 @@ export default function OptimizerPage() {
         </button>
       </Card>
 
-      <OptimizationResult result={result} />
+      {result && (
+        <>
+          <OptimizationResult
+            result={result}
+          />
+
+          <BudgetPlanner
+            originalTokens={
+              result.original_tokens
+            }
+            optimizedTokens={
+              result.optimized_tokens
+            }
+            budget={
+              models[selectedModel]
+                .contextWindow
+            }
+          />
+        </>
+      )}
     </div>
   )
 }
