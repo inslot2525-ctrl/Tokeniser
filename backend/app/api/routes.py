@@ -1,21 +1,23 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.models.schemas import (
     PromptRequest,
-    TokenResponse
+    TokenResponse,
+    OptimizationResponse,
 )
 
 from app.engine.tokenizer import (
-    count_tokens
+    count_tokens,
 )
 
 from app.engine.optimizer import (
-    optimize_prompt
+    optimize_prompt,
 )
 
-from app.models.schemas import (
-    OptimizationResponse
+from app.engine.enhancer import (
+    enhance_prompt,
 )
+
 router = APIRouter()
 
 
@@ -26,8 +28,10 @@ def home():
     }
 
 
-@router.post("/tokenize",
-             response_model=TokenResponse)
+@router.post(
+    "/tokenize",
+    response_model=TokenResponse
+)
 def tokenize_prompt(
     payload: PromptRequest
 ):
@@ -38,13 +42,34 @@ def tokenize_prompt(
     return {
         "tokens": token_count
     }
-    
-    
+
+
 @router.post(
     "/optimize",
     response_model=OptimizationResponse
 )
-def optimize(payload: PromptRequest):
+def optimize(
+    payload: PromptRequest
+):
     return optimize_prompt(
         payload.prompt
     )
+
+
+@router.post("/enhance")
+def enhance(payload: PromptRequest):
+    try:
+        enhanced_text = enhance_prompt(
+            payload.prompt
+        )
+
+        return {
+            "enhanced": enhanced_text
+        }
+
+    except Exception as e:
+        print("ENHANCE ERROR:", repr(e))
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )

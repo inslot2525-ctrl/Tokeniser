@@ -1,5 +1,9 @@
 {
   "dependencies": {
-    "lucide-react": "^1.17.0"
+    "lucide-react": "^1.17.0",
+    "react-router-dom": "^7.17.0"
+  },
+  "devDependencies": {
+    "@types/react-router-dom": "^5.3.3"
   }
 }

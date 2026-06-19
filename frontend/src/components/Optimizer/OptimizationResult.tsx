@@ -1,5 +1,6 @@
 import { Copy, CheckCircle } from "lucide-react";
 import { useState } from "react";
+import DiffViewer from "./DiffViewer";
 
 interface Props {
   result: any;
@@ -8,15 +9,12 @@ interface Props {
 export default function OptimizationResult({
   result,
 }: Props) {
-  const [copied, setCopied] =
-    useState(false);
+  const [copied, setCopied] = useState(false);
 
   if (!result) return null;
 
   const score = Math.min(
-    Math.floor(
-      result.savings_percent * 2.5
-    ),
+    Math.floor(result.savings_percent * 2.5),
     100
   );
 
@@ -28,22 +26,26 @@ export default function OptimizationResult({
   if (score > 90) rank = "Diamond";
 
   async function copyPrompt() {
-    await navigator.clipboard.writeText(
-      result.optimized
-    );
+    try {
+      await navigator.clipboard.writeText(
+        result.optimized
+      );
 
-    setCopied(true);
+      setCopied(true);
 
-    setTimeout(() => {
-      setCopied(false);
-    }, 2000);
+      setTimeout(() => {
+        setCopied(false);
+      }, 2000);
+    } catch (error) {
+      console.error(error);
+    }
   }
 
   return (
     <div className="optimization-grid">
+      {/* Metrics */}
 
       <div className="metrics-grid">
-
         <div className="metric-card glass">
           <h3>{result.original_tokens}</h3>
           <p>Original Tokens</p>
@@ -60,54 +62,58 @@ export default function OptimizationResult({
         </div>
 
         <div className="metric-card glass">
-          <h3>
-            {result.savings_percent}%
-          </h3>
+          <h3>{result.savings_percent}%</h3>
           <p>Reduction</p>
         </div>
-
       </div>
 
-      <div className="glass score-card">
+      {/* Score */}
 
+      <div className="glass score-card">
         <h2>
           Efficiency Score: {score}/100
         </h2>
 
-        <p>
-          Rank: {rank}
-        </p>
+        <p>Rank: {rank}</p>
 
         <div className="progress-bar">
           <div
             className="progress-fill"
             style={{
-              width: `${result.savings_percent}%`,
+              width: `${score}%`,
             }}
           />
         </div>
-
       </div>
 
-      <div className="glass result-card">
+      {/* Original */}
 
+      <div className="glass result-card">
         <h3>Original Prompt</h3>
 
-        <p>
+        <pre className="prompt-block">
           {result.original}
-        </p>
-
+        </pre>
       </div>
+
+      {/* Optimized */}
 
       <div className="glass result-card">
-
         <h3>Optimized Prompt</h3>
 
-        <p>
+        <pre className="prompt-block">
           {result.optimized}
-        </p>
-
+        </pre>
       </div>
+
+      {/* Diff Viewer */}
+
+      <DiffViewer
+        original={result.original}
+        optimized={result.optimized}
+      />
+
+      {/* Copy Button */}
 
       <button
         className="copy-button"
@@ -116,7 +122,7 @@ export default function OptimizationResult({
         {copied ? (
           <>
             <CheckCircle size={18} />
-            Copied
+            Copied Successfully
           </>
         ) : (
           <>
@@ -125,7 +131,6 @@ export default function OptimizationResult({
           </>
         )}
       </button>
-
     </div>
   );
 }
