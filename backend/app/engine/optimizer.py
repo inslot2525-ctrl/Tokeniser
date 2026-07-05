@@ -1,39 +1,47 @@
-import re
+import os
+from groq import Groq
+from app.engine.tokenizer import count_tokens
 
-from app.engine.rules import RULES
-
-from app.engine.tokenizer import (
-    count_tokens,
+client = Groq(
+    api_key=os.getenv("GROQ_API_KEY")
 )
-
-
-def clean_whitespace(text: str) -> str:
-    text = re.sub(r"\s+", " ", text)
-
-    return text.strip()
-
-
-def apply_rules(text: str) -> str:
-    optimized = text.lower()
-
-    for old, new in RULES.items():
-        optimized = optimized.replace(
-            old,
-            new
-        )
-
-    return optimized
 
 
 def optimize_prompt(prompt: str):
     original_prompt = prompt
+    original_tokens = count_tokens(prompt)
 
-    original_tokens = count_tokens(
-        original_prompt
+    system_prompt = f"""
+You are a prompt optimization engine.
+
+Your task:
+1. Preserve original meaning exactly
+2. Remove filler words
+3. Remove politeness fluff
+4. Compress wording aggressively
+5. Reduce token count as much as possible
+6. Keep important constraints
+7. Return ONLY optimized prompt
+
+Prompt:
+{prompt}
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "user",
+                "content": system_prompt
+            }
+        ],
+        temperature=0.2
     )
 
-    optimized_prompt = clean_whitespace(
-        apply_rules(prompt)
+    optimized_prompt = (
+        response.choices[0]
+        .message.content
+        .strip()
     )
 
     optimized_tokens = count_tokens(
@@ -48,12 +56,8 @@ def optimize_prompt(prompt: str):
 
     if original_tokens > 0:
         savings_percent = round(
-            (
-                saved_tokens
-                / original_tokens
-            )
-            * 100,
-            2,
+            (saved_tokens / original_tokens) * 100,
+            2
         )
 
     return {

@@ -126,10 +126,12 @@ button {
     0 10px 25px rgba(16, 185, 129, 0.35);
 }
 
-.metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+.metric-card {
+  padding: 14px;
+  border-radius: 16px;
+  text-align: center;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .metric-card {
