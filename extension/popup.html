@@ -12,8 +12,9 @@
   ></textarea>
 
   <div class="buttons">
-    <button id="enhanceBtn">Enhance</button>
-    <button id="optimizeBtn">Optimize</button>
+<button id="enhanceBtn">Improve</button>
+<button id="compressBtn">Compress</button>
+<button id="smartBtn">Smart Optimize</button>
   </div>
 
   <textarea
@@ -22,9 +23,47 @@
     placeholder="Output..."
   ></textarea>
 
-  <button id="copyBtn">
-    Copy Prompt
-  </button>
+<div class="metrics">
+  <div class="metric-card">
+    <div
+      id="originalTokens"
+      class="metric-value"
+    >
+      0
+    </div>
+    <div class="metric-label">
+      Original
+    </div>
+  </div>
+
+  <div class="metric-card">
+    <div
+      id="optimizedTokens"
+      class="metric-value"
+    >
+      0
+    </div>
+    <div class="metric-label">
+      Optimized
+    </div>
+  </div>
+
+  <div class="metric-card">
+    <div
+      id="savedTokens"
+      class="metric-value"
+    >
+      0%
+    </div>
+    <div class="metric-label">
+      Saved
+    </div>
+  </div>
+</div>
+
+<button id="copyBtn" class="copy-btn">
+  Copy Prompt
+</button>
 
   <script src="popup.js"></script>
 </body>
