@@ -62,44 +62,21 @@ def estimate_remote_cost(
     )
 
 
-def decide_route(
-    analysis,
-):
+def decide_route(analysis):
 
-    difficulty = analysis["difficulty"]
-
-    reasoning = analysis["reasoning"]
-
-    confidence = estimate_confidence(
-        difficulty,
-        reasoning,
-    )
-
-    if difficulty == "Easy":
+    if analysis["recommended_route"] == "Gemini":
 
         return {
-            "route": "Local",
-            "model": LOCAL_MODELS["default"]["name"],
-            "confidence": confidence,
-        }
-
-    if (
-        difficulty == "Medium"
-        and confidence >= 85
-    ):
-
-        return {
-            "route": "Local",
-            "model": LOCAL_MODELS["default"]["name"],
-            "confidence": confidence,
+            "route": "Gemini",
+            "model": REMOTE_MODELS["default"]["name"],
+            "confidence": 95,
         }
 
     return {
-        "route": "Gemini",
-        "model": REMOTE_MODELS["default"]["name"],
-        "confidence": confidence,
+        "route": "Local",
+        "model": LOCAL_MODELS["default"]["name"],
+        "confidence": 95,
     }
-
 
 def route_prompt(
     prompt: str,
