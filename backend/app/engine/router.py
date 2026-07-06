@@ -10,10 +10,6 @@ from app.engine.fireworks_llm import (
     remote_generate,
 )
 
-from app.engine.confidence import (
-    estimate_answer_confidence,
-)
-
 
 LOCAL_MODELS = {
     "default": {
@@ -26,7 +22,7 @@ LOCAL_MODELS = {
 
 REMOTE_MODELS = {
     "default": {
-        "name": "Fireworks AI",
+        "name": "Gemini",
         "latency": "Medium",
         "cost": "Token Based",
     }
@@ -37,10 +33,6 @@ def estimate_confidence(
     difficulty: str,
     reasoning: str,
 ):
-    """
-    Initial confidence estimation based
-    on prompt complexity.
-    """
 
     if (
         difficulty == "Easy"
@@ -58,9 +50,6 @@ def estimate_remote_cost(
     input_tokens: int,
     output_tokens: int,
 ):
-    """
-    Approximate remote model cost.
-    """
 
     total_tokens = (
         input_tokens
@@ -77,13 +66,9 @@ def decide_route(
     analysis,
 ):
 
-    difficulty = analysis[
-        "difficulty"
-    ]
+    difficulty = analysis["difficulty"]
 
-    reasoning = analysis[
-        "reasoning"
-    ]
+    reasoning = analysis["reasoning"]
 
     confidence = estimate_confidence(
         difficulty,
@@ -92,37 +77,26 @@ def decide_route(
 
     if difficulty == "Easy":
 
-        route = "Local"
+        return {
+            "route": "Local",
+            "model": LOCAL_MODELS["default"]["name"],
+            "confidence": confidence,
+        }
 
-        model = LOCAL_MODELS[
-            "default"
-        ]["name"]
-
-    elif (
+    if (
         difficulty == "Medium"
         and confidence >= 85
     ):
 
-        route = "Local"
-
-        model = LOCAL_MODELS[
-            "default"
-        ]["name"]
-
-    else:
-
-        route = "Fireworks"
-
-        model = REMOTE_MODELS[
-            "default"
-        ]["name"]
+        return {
+            "route": "Local",
+            "model": LOCAL_MODELS["default"]["name"],
+            "confidence": confidence,
+        }
 
     return {
-
-        "route": route,
-
-        "model": model,
-
+        "route": "Gemini",
+        "model": REMOTE_MODELS["default"]["name"],
         "confidence": confidence,
     }
 
@@ -140,7 +114,7 @@ def route_prompt(
     )
 
     # ------------------------
-    # Decide Initial Route
+    # Decide Route
     # ------------------------
 
     routing = decide_route(
@@ -148,73 +122,36 @@ def route_prompt(
     )
 
     estimated_cost = estimate_remote_cost(
-        analysis[
-            "estimated_input_tokens"
-        ],
-        analysis[
-            "estimated_output_tokens"
-        ],
+        analysis["estimated_input_tokens"],
+        analysis["estimated_output_tokens"],
     )
 
-    final_confidence = routing[
-        "confidence"
-    ]
+    print("\n==============================")
+    print("Generating Initial Response...")
+    print("==============================")
 
     # ------------------------
-    # Execute Model
+    # Generate Response
     # ------------------------
 
     if routing["route"] == "Local":
 
-        print("Using Local Gemma...")
+        print("Using Local Gemma")
 
         response = local_generate(
             prompt
         )
 
-        final_confidence = (
-            estimate_answer_confidence(
-                prompt,
-                response,
-            )
-        )
-
-        print(
-            "Local Confidence:",
-            final_confidence,
-        )
-
-        # Confidence too low?
-        if final_confidence < 85:
-
-            print(
-                "Escalating to Fireworks..."
-            )
-
-            response = remote_generate(
-                prompt
-            )
-
-            routing[
-                "route"
-            ] = "Fireworks"
-
-            routing[
-                "model"
-            ] = "Fireworks AI"
-
     else:
 
-        print(
-            "Using Fireworks..."
-        )
+        print("Using Gemini")
 
         response = remote_generate(
             prompt
         )
 
     # ------------------------
-    # Return Results
+    # Return
     # ------------------------
 
     return {
@@ -235,23 +172,18 @@ def route_prompt(
             routing["route"],
 
         "confidence":
-            final_confidence,
+            routing["confidence"],
 
         "estimated_input_tokens":
-            analysis[
-                "estimated_input_tokens"
-            ],
+            analysis["estimated_input_tokens"],
 
         "estimated_output_tokens":
-            analysis[
-                "estimated_output_tokens"
-            ],
+            analysis["estimated_output_tokens"],
 
         "estimated_remote_cost":
             (
                 "$0"
-                if routing["route"]
-                == "Local"
+                if routing["route"] == "Local"
                 else f"${estimated_cost}"
             ),
 
