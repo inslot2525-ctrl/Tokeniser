@@ -1,49 +1,54 @@
-import os
-from groq import Groq
+from app.core.gemini_client import client
 
 from app.engine.tokenizer import (
     count_tokens,
 )
 
-client = Groq(
-    api_key=os.getenv("GROQ_API_KEY")
-)
 
+def smart_optimize_prompt(
+    user_prompt: str,
+) -> str:
+    """
+    Returns ONLY the optimized prompt.
+    Used by the Agent.
+    """
 
-def smart_optimize_prompt(user_prompt: str):
     prompt = f"""
-You are an AI prompt optimizer.
+You are an expert AI prompt optimizer.
 
 Tasks:
-1. Fix grammar
-2. Fix spelling
-3. Improve clarity
-4. Compress wording
-5. Preserve exact meaning
-6. Minimize token count
-7. Return only final optimized prompt
+1. Fix grammar.
+2. Fix spelling.
+3. Improve clarity.
+4. Remove unnecessary words.
+5. Preserve exact meaning.
+6. Reduce token count.
+7. Return ONLY the optimized prompt.
+8. Do not explain anything.
 
 Prompt:
+
 {user_prompt}
 """
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        temperature=0.3
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt,
     )
 
-    optimized = (
-        response
-        .choices[0]
-        .message
-        .content
-        .strip()
+    return response.text.strip()
+
+
+def smart_optimize_with_metrics(
+    user_prompt: str,
+):
+    """
+    Returns optimized prompt + token statistics.
+    Used by the Extension/Web UI.
+    """
+
+    optimized = smart_optimize_prompt(
+        user_prompt
     )
 
     original_tokens = count_tokens(
@@ -67,7 +72,7 @@ Prompt:
                 saved_tokens
                 / original_tokens
             ) * 100,
-            2
+            2,
         )
 
     return {

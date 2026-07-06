@@ -22,11 +22,13 @@ from app.engine.planner import (
 def run_agent(prompt: str):
 
     original_prompt = prompt
+
     current_prompt = prompt
 
     steps = []
 
     print("\n========== TOKENWISE AGENT ==========")
+
     print("Original Prompt:")
     print(current_prompt)
     print(type(current_prompt))
@@ -35,24 +37,33 @@ def run_agent(prompt: str):
     # Planner
     # ----------------------------
 
-    plan = plan_actions(current_prompt)
+    plan = plan_actions(
+        current_prompt
+    )
 
     print("\nPlanner Output:")
+
     print(plan)
+
     print(type(plan))
 
     # ----------------------------
     # Enhance
     # ----------------------------
 
-    if plan.get("enhance", False):
+    if plan.get(
+        "enhance",
+        False,
+    ):
 
         current_prompt = enhance_prompt(
             current_prompt
         )
 
         print("\nAfter Enhance:")
+
         print(type(current_prompt))
+
         print(current_prompt)
 
         steps.append(
@@ -63,14 +74,19 @@ def run_agent(prompt: str):
     # Compress
     # ----------------------------
 
-    if plan.get("compress", False):
+    if plan.get(
+        "compress",
+        False,
+    ):
 
         current_prompt = compress_prompt(
             current_prompt
         )
 
         print("\nAfter Compress:")
+
         print(type(current_prompt))
+
         print(current_prompt)
 
         steps.append(
@@ -90,8 +106,12 @@ def run_agent(prompt: str):
             current_prompt
         )
 
-        print("\nAfter Smart Optimize:")
+        print(
+            "\nAfter Smart Optimize:"
+        )
+
         print(type(current_prompt))
+
         print(current_prompt)
 
         steps.append(
@@ -99,11 +119,13 @@ def run_agent(prompt: str):
         )
 
     # ----------------------------
-    # Before Router
+    # Route
     # ----------------------------
 
     print("\nBefore Routing:")
+
     print(type(current_prompt))
+
     print(current_prompt)
 
     routing = route_prompt(
@@ -111,6 +133,7 @@ def run_agent(prompt: str):
     )
 
     print("\nRouting Output:")
+
     print(routing)
 
     return {
@@ -149,7 +172,8 @@ def run_agent(prompt: str):
             ],
 
         "response":
-            routing[
-                "response"
-            ],
+            routing.get(
+                "response",
+                current_prompt,
+            ),
     }

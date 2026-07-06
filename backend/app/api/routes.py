@@ -4,10 +4,10 @@ from app.engine.jailbreak_detector import (
     detect_prompt_risk,
 )
 
-from app.engine.compressor import (
-    compress_prompt,
+from app.engine.smart_optimizer import (
+    smart_optimize_prompt,
+    smart_optimize_with_metrics,
 )
-
 from app.engine.smart_optimizer import (
     smart_optimize_prompt,
 )
@@ -40,6 +40,10 @@ from app.engine.agent import (
 
 from app.engine.agent import (
     run_agent,
+)
+
+from app.engine.compressor import (
+    compress_prompt,
 )
 router = APIRouter()
 
@@ -99,16 +103,16 @@ def enhance(payload: PromptRequest):
         
 @router.post("/compress")
 def compress(payload: PromptRequest):
-    return compress_prompt(
+    return compress_prompt (
         payload.prompt
     )
 
 
 @router.post("/smart-optimize")
 def smart_optimize(
-    payload: PromptRequest
+    payload: PromptRequest,
 ):
-    return smart_optimize_prompt(
+    return smart_optimize_with_metrics(
         payload.prompt
     )
 
