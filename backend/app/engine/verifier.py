@@ -13,13 +13,13 @@ def verify_response(
     Returns:
         score
         passed
-        reasoning
+        reason
     """
 
     verification_prompt = f"""
 You are an expert AI evaluator.
 
-Evaluate the AI response.
+Evaluate the following AI response.
 
 User Prompt:
 {prompt}
@@ -27,7 +27,7 @@ User Prompt:
 AI Response:
 {response}
 
-Score the response from 0-10.
+Score the response from 0 to 10.
 
 Evaluate:
 
@@ -55,13 +55,24 @@ Example:
 
     text = result.text.strip()
 
+    # Remove markdown fences if Gemini adds them
+    text = (
+        text.replace("```json", "")
+        .replace("```", "")
+        .strip()
+    )
+
     try:
         return json.loads(text)
 
-    except Exception:
+    except Exception as e:
+
+        print("\nVerifier Parse Error:")
+        print(text)
+        print(e)
 
         return {
             "score": 5,
             "passed": False,
-            "reason": "Verifier could not parse evaluation."
+            "reason": "Verifier could not parse evaluation.",
         }
