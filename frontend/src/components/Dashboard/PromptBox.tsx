@@ -1,45 +1,139 @@
 import { useState } from "react";
 
-import AnimatedButton from "../Layout/AnimatedButton";
+import useAgent from "../../hooks/useAgent";
 
-export default function PromptBox(){
+import { useAgentContext } from "../../context/AgentContext";
 
-const [prompt,setPrompt]=useState("");
+export default function PromptBox() {
 
-return(
+    const [prompt, setPrompt] =
+        useState("");
 
-<div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl p-8">
+    const {
 
-<h2 className="mb-6 text-xl font-semibold text-white">
+        execute,
 
-Prompt
+        loading,
 
-</h2>
+        error,
 
-<textarea
+    } = useAgent();
 
-value={prompt}
+    const {
 
-onChange={(e)=>setPrompt(e.target.value)}
+        setResult,
 
-placeholder="Describe your task..."
+    } = useAgentContext();
 
-className="h-60 w-full resize-none rounded-xl border border-white/10 bg-black/30 p-5 text-white outline-none"
+    async function handleSubmit() {
 
-/>
+        if (!prompt.trim()) return;
 
-<div className="mt-6 flex justify-end">
+        const response =
+            await execute(prompt);
 
-<AnimatedButton
+        if (response) {
 
-text="Optimize & Execute"
+            setResult(response);
 
-/>
+        }
 
-</div>
+    }
 
-</div>
+    return (
 
-)
+        <div className="rounded-3xl border border-white/10 bg-[#101010] p-8">
+
+            <h2 className="text-3xl font-bold mb-6">
+
+                AI Prompt Optimizer
+
+            </h2>
+
+            <textarea
+
+                value={prompt}
+
+                onChange={(e) =>
+                    setPrompt(e.target.value)
+                }
+
+                placeholder="Enter your prompt..."
+
+                className="w-full h-56 resize-none rounded-2xl bg-black border border-white/10 p-5 text-white outline-none focus:border-orange-400"
+
+            />
+
+            <div className="flex justify-between items-center mt-5">
+
+                <div className="text-gray-400">
+
+                    Characters
+
+                    {" "}
+
+                    {prompt.length}
+
+                </div>
+
+                <div className="flex gap-3">
+
+                    <button
+
+                        onClick={() =>
+                            setPrompt("")
+                        }
+
+                        className="px-5 py-3 rounded-xl border border-white/10 hover:bg-white/5"
+
+                    >
+
+                        Clear
+
+                    </button>
+
+                    <button
+
+                        disabled={loading}
+
+                        onClick={handleSubmit}
+
+                        className="px-8 py-3 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-50"
+
+                    >
+
+                        {
+
+                            loading
+
+                                ? "Processing..."
+
+                                : "Optimize"
+
+                        }
+
+                    </button>
+
+                </div>
+
+            </div>
+
+            {
+
+                error && (
+
+                    <div className="text-red-400 mt-5">
+
+                        {error}
+
+                    </div>
+
+                )
+
+            }
+
+        </div>
+
+    );
 
 }
