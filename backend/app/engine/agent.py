@@ -26,6 +26,10 @@ from app.engine.fireworks_llm import (
     remote_generate,
 )
 
+from app.analytics.metrics import (
+    log_request,
+)
+
 
 def run_agent(prompt: str):
 
@@ -44,7 +48,9 @@ def run_agent(prompt: str):
     # Planner
     # -----------------------------------
 
-    plan = plan_actions(current_prompt)
+    plan = plan_actions(
+        current_prompt
+    )
 
     print("\nPlanner Output:")
     print(plan)
@@ -53,7 +59,10 @@ def run_agent(prompt: str):
     # Enhance
     # -----------------------------------
 
-    if plan.get("enhance", False):
+    if plan.get(
+        "enhance",
+        False,
+    ):
 
         current_prompt = enhance_prompt(
             current_prompt
@@ -70,7 +79,10 @@ def run_agent(prompt: str):
     # Compress
     # -----------------------------------
 
-    if plan.get("compress", False):
+    if plan.get(
+        "compress",
+        False,
+    ):
 
         current_prompt = compress_prompt(
             current_prompt
@@ -104,7 +116,7 @@ def run_agent(prompt: str):
         )
 
     # -----------------------------------
-    # Routing
+    # Router
     # -----------------------------------
 
     print("\nRouting Prompt...")
@@ -113,16 +125,22 @@ def run_agent(prompt: str):
         current_prompt
     )
 
-    response = routing["response"]
+    response = routing[
+        "response"
+    ]
 
     print("\nModel Used:")
-    print(routing["recommended_model"])
+    print(
+        routing[
+            "recommended_model"
+        ]
+    )
 
     print("\nGenerated Response:")
     print(response)
 
     # -----------------------------------
-    # Verification
+    # Verifier
     # -----------------------------------
 
     verification = verify_response(
@@ -137,11 +155,17 @@ def run_agent(prompt: str):
     # Automatic Retry
     # -----------------------------------
 
-    if verification["score"] < 8:
+    if verification[
+        "score"
+    ] < 8:
 
-        print("\nVerifier rejected response.")
+        print(
+            "\nVerifier rejected response."
+        )
 
-        print("Retrying using Gemini...")
+        print(
+            "Retrying using Gemini..."
+        )
 
         response = remote_generate(
             current_prompt
@@ -152,7 +176,9 @@ def run_agent(prompt: str):
             response,
         )
 
-        routing["route"] = "Gemini Retry"
+        routing[
+            "route"
+        ] = "Gemini Retry"
 
         routing[
             "recommended_model"
@@ -168,12 +194,54 @@ def run_agent(prompt: str):
             "Automatic retry triggered"
         )
 
-        print("\nRetry Verification:")
-        print(verification)
+        print(
+            "\nRetry Verification:"
+        )
+
+        print(
+            verification
+        )
 
     else:
 
-        print("\nVerifier accepted response.")
+        print(
+            "\nVerifier accepted response."
+        )
+
+    # -----------------------------------
+    # Analytics Logging
+    # -----------------------------------
+
+    log_request(
+
+        prompt=current_prompt,
+
+        route=routing[
+            "route"
+        ],
+
+        difficulty=routing.get(
+            "difficulty",
+            "Unknown",
+        ),
+
+        original_tokens=len(
+            original_prompt.split()
+        ),
+
+        optimized_tokens=len(
+            current_prompt.split()
+        ),
+
+        verification_score=verification.get(
+            "score",
+            0,
+        ),
+
+        estimated_cost=routing[
+            "estimated_remote_cost"
+        ],
+    )
 
     # -----------------------------------
     # Final Output
@@ -197,7 +265,9 @@ def run_agent(prompt: str):
             steps,
 
         "route":
-            routing["route"],
+            routing[
+                "route"
+            ],
 
         "model":
             routing[

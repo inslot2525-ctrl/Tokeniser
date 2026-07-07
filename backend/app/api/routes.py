@@ -45,6 +45,10 @@ from app.engine.agent import (
 from app.engine.compressor import (
     compress_prompt,
 )
+
+from app.analytics.metrics import (
+    get_dashboard,
+)
 router = APIRouter()
 
 
@@ -149,3 +153,7 @@ def agent(
     return run_agent(
         payload.prompt
     )
+    
+@router.get("/dashboard")
+def dashboard():
+    return get_dashboard()

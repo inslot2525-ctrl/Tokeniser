@@ -8,6 +8,12 @@ import LoginPage from './pages/LoginPage'
 
 import OptimizerPage from './pages/OptimizerPage'
 
+import LandingPage from "./pages/LandingPage";
+
+export default function App() {
+  return <LandingPage />;
+}
+
 export default function App() {
   const [loggedIn, setLoggedIn] =
     useState(
