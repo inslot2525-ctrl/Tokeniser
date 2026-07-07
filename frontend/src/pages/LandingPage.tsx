@@ -1,4 +1,5 @@
 import HeroSection from "../components/Hero/HeroSection";
+import PromptBox from "../components/Dashboard/PromptBox";
 
 export default function LandingPage() {
   return (
