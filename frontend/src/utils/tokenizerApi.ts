@@ -1,14 +1,6 @@
-import API from './api'
+import { tokenizePrompt } from "../services/api";
 
-export async function getTokenCount(
-  prompt: string,
-) {
-  const response = await API.post(
-    '/tokenize',
-    {
-      prompt,
-    },
-  )
-
-  return response.data.tokens
+export async function getTokenCount(prompt: string): Promise<number> {
+  const result = await tokenizePrompt(prompt);
+  return result.tokens;
 }

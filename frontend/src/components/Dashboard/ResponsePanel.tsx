@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 
 import { useAgentContext } from "../../context/AgentContext";
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 
 export default function ResponsePanel() {
 
@@ -47,12 +48,8 @@ export default function ResponsePanel() {
     }
 
     async function copyText() {
-
-        await navigator.clipboard.writeText(
-
-            result.response
-
-        );
+        if (!result) return;
+        await navigator.clipboard.writeText(result.response);
 
         setCopied(true);
 
@@ -197,8 +194,7 @@ export default function ResponsePanel() {
                     {
 
                         result.steps.map(
-
-                            (step,index)=>(
+                            (step: string, index: number) => (
 
                                 <div
 
