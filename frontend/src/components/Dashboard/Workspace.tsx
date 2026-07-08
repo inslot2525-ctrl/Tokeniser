@@ -12,9 +12,15 @@ import ResponseCard from "../Response/ResponseCard";
 import toast from "react-hot-toast";
 
 export default function Workspace() {
-  const { prompt, setResult, setIsLoading, error, startNewRun } = useAgentContext();
-  const { execute } = useAgents();
+  const { prompt, setResult, setIsLoading, error, startNewRun, stopRun } = useAgentContext();
+  const { execute, cancel } = useAgents();
   const { addEntry } = useHistory();
+
+  function handleStop() {
+    cancel();   // abort the in-flight HTTP request
+    stopRun();  // reset context loading state
+    toast("Stopped", { icon: "⛔" });
+  }
 
   async function handleRun() {
     if (!prompt.trim()) {
@@ -22,7 +28,6 @@ export default function Workspace() {
       return;
     }
 
-    // clears result + error, bumps runId, sets isLoading — all atomically
     startNewRun();
 
     const response = await execute(prompt);
@@ -40,8 +45,8 @@ export default function Workspace() {
         savingsPercent: 0,
         confidence: response.confidence,
       });
-      toast.success("Agent completed successfully");
-    } else {
+      toast.success("Agent completed");
+    } else if (error !== "Stopped by user") {
       toast.error("Agent failed — check the backend");
     }
 
@@ -51,14 +56,8 @@ export default function Workspace() {
   return (
     <div className="space-y-8">
       <PromptEditor onSubmit={handleRun} />
-      <PromptToolbar onRun={handleRun} />
+      <PromptToolbar onRun={handleRun} onStop={handleStop} />
       <PromptStats />
-
-      {error && (
-        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-6 py-4 text-sm text-red-400">
-          {error}
-        </div>
-      )}
 
       <Pipeline />
       <LiveExecution />
