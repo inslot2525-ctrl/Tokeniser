@@ -6,6 +6,8 @@ from app.api.routes import router
 app = FastAPI()
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
 origins = [
     "http://localhost:5173",
     "https://tokeniser-eta.vercel.app",
