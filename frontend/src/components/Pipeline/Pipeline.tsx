@@ -19,10 +19,11 @@ const STAGES = [
 ];
 
 export default function Pipeline() {
-  const { result, isLoading } = useAgentContext();
+  const { result, isLoading, runId } = useAgentContext();
   const [activeStage, setActiveStage] = useState(-1);
 
   // Animate through stages while loading, freeze at end when result arrives
+  // runId in deps forces re-animation on each new run
   useEffect(() => {
     if (!isLoading && !result) {
       setActiveStage(-1);
@@ -34,6 +35,8 @@ export default function Pipeline() {
       return;
     }
 
+    // reset and animate from 0
+    setActiveStage(-1);
     let current = 0;
     const interval = setInterval(() => {
       setActiveStage(current);
@@ -42,7 +45,7 @@ export default function Pipeline() {
     }, 600);
 
     return () => clearInterval(interval);
-  }, [isLoading, result]);
+  }, [isLoading, result, runId]);
 
   return (
     <div className="rounded-3xl border border-white/10 bg-[#101010] p-8">
