@@ -14,6 +14,7 @@ interface AgentContextType {
   setPrompt: (p: string) => void;
   runId: number;
   startNewRun: () => void;
+  stopRun: () => void;
 }
 
 const AgentContext = createContext<AgentContextType>({
@@ -27,6 +28,7 @@ const AgentContext = createContext<AgentContextType>({
   setPrompt: () => {},
   runId: 0,
   startNewRun: () => {},
+  stopRun: () => {},
 });
 
 export function AgentProvider({ children }: { children: React.ReactNode }) {
@@ -43,9 +45,14 @@ export function AgentProvider({ children }: { children: React.ReactNode }) {
     setRunId((prev) => prev + 1);
   };
 
+  const stopRun = () => {
+    setIsLoading(false);
+    setError("Stopped by user");
+  };
+
   return (
     <AgentContext.Provider
-      value={{ result, setResult, isLoading, setIsLoading, error, setError, prompt, setPrompt, runId, startNewRun }}
+      value={{ result, setResult, isLoading, setIsLoading, error, setError, prompt, setPrompt, runId, startNewRun, stopRun }}
     >
       {children}
     </AgentContext.Provider>

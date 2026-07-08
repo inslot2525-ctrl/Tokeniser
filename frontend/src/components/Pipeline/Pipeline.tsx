@@ -22,20 +22,20 @@ export default function Pipeline() {
   const { result, isLoading, runId } = useAgentContext();
   const [activeStage, setActiveStage] = useState(-1);
 
-  // Animate through stages while loading, freeze at end when result arrives
-  // runId in deps forces re-animation on each new run
   useEffect(() => {
+    // Stopped or idle — reset to blank
     if (!isLoading && !result) {
       setActiveStage(-1);
       return;
     }
 
+    // Done — freeze all complete
     if (result) {
-      setActiveStage(STAGES.length); // all complete
+      setActiveStage(STAGES.length);
       return;
     }
 
-    // reset and animate from 0
+    // New run started — reset then animate
     setActiveStage(-1);
     let current = 0;
     const interval = setInterval(() => {
