@@ -7,6 +7,8 @@ import type {
   DashboardStats,
 } from "../types/api";
 
+console.log("API URL =", import.meta.env.VITE_API_URL);
+
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: {
