@@ -1,51 +1,44 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  ReactNode,
-} from "react";
+import { createContext, useContext, useState } from "react";
+import type { AgentResponse } from "../types/api";
 
-import { AgentResponse } from "../types/api";
+export type AgentResult = AgentResponse;
 
 interface AgentContextType {
-  result: AgentResponse | null;
-  setResult: (value: AgentResponse | null) => void;
+  result: AgentResult | null;
+  setResult: (result: AgentResult | null) => void;
+  isLoading: boolean;
+  setIsLoading: (v: boolean) => void;
+  error: string | null;
+  setError: (e: string | null) => void;
+  prompt: string;
+  setPrompt: (p: string) => void;
 }
 
-const AgentContext =
-  createContext<AgentContextType | undefined>(
-    undefined
-  );
+const AgentContext = createContext<AgentContextType>({
+  result: null,
+  setResult: () => {},
+  isLoading: false,
+  setIsLoading: () => {},
+  error: null,
+  setError: () => {},
+  prompt: "",
+  setPrompt: () => {},
+});
 
-export function AgentProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  const [result, setResult] =
-    useState<AgentResponse | null>(null);
+export function AgentProvider({ children }: { children: React.ReactNode }) {
+  const [result, setResult] = useState<AgentResult | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState("");
 
   return (
     <AgentContext.Provider
-      value={{
-        result,
-        setResult,
-      }}
+      value={{ result, setResult, isLoading, setIsLoading, error, setError, prompt, setPrompt }}
     >
       {children}
     </AgentContext.Provider>
   );
 }
 
-export function useAgentContext() {
-  const context =
-    useContext(AgentContext);
-
-  if (!context) {
-    throw new Error(
-      "useAgentContext must be used inside AgentProvider"
-    );
-  }
-
-  return context;
-}
+export const useAgent = () => useContext(AgentContext);
+export const useAgentContext = () => useContext(AgentContext);

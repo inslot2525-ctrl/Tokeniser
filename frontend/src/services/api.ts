@@ -1,175 +1,47 @@
 import axios from "axios";
+import type {
+  AgentResponse,
+  OptimizeResponse,
+  TokenResponse,
+  EnhanceResponse,
+  DashboardStats,
+} from "../types/api";
 
-const api = axios.create({
-
-    baseURL: "http://127.0.0.1:8000",
-
-    headers: {
-
-        "Content-Type": "application/json",
-
-    },
-
+const http = axios.create({
+  baseURL: "http://127.0.0.1:8000",
+  headers: { "Content-Type": "application/json" },
 });
 
-export default api;
+const body = (prompt: string) => ({ prompt });
 
-
-
-export async function runAgent(prompt: string) {
-
-    const response = await api.post(
-
-        "/agent",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
+export async function runAgent(prompt: string): Promise<AgentResponse> {
+  const { data } = await http.post<AgentResponse>("/agent", body(prompt));
+  return data;
 }
 
-
-
-export async function tokenize(prompt: string) {
-
-    const response = await api.post(
-
-        "/tokenize",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
+export async function optimizePrompt(prompt: string): Promise<OptimizeResponse> {
+  const { data } = await http.post<OptimizeResponse>("/optimize", body(prompt));
+  return data;
 }
 
-
-
-export async function optimize(prompt: string) {
-
-    const response = await api.post(
-
-        "/optimize",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
+export async function smartOptimize(prompt: string): Promise<OptimizeResponse> {
+  const { data } = await http.post<OptimizeResponse>("/smart-optimize", body(prompt));
+  return data;
 }
 
-
-
-export async function enhance(prompt: string) {
-
-    const response = await api.post(
-
-        "/enhance",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
+export async function enhancePrompt(prompt: string): Promise<EnhanceResponse> {
+  const { data } = await http.post<EnhanceResponse>("/enhance", body(prompt));
+  return data;
 }
 
-
-
-export async function compress(prompt: string) {
-
-    const response = await api.post(
-
-        "/compress",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
+export async function tokenizePrompt(prompt: string): Promise<TokenResponse> {
+  const { data } = await http.post<TokenResponse>("/tokenize", body(prompt));
+  return data;
 }
 
-
-
-export async function smartOptimize(prompt: string) {
-
-    const response = await api.post(
-
-        "/smart-optimize",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
+export async function getDashboard(): Promise<DashboardStats> {
+  const { data } = await http.get<DashboardStats>("/dashboard");
+  return data;
 }
 
-
-
-export async function detectRisk(prompt: string) {
-
-    const response = await api.post(
-
-        "/detect-risk",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
-}
-
-
-
-export async function route(prompt: string) {
-
-    const response = await api.post(
-
-        "/route",
-
-        {
-
-            prompt,
-
-        }
-
-    );
-
-    return response.data;
-
-}
+export default http;

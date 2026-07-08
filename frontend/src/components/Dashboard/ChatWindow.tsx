@@ -11,12 +11,8 @@ export default function ChatWindow() {
     if (!result) return null;
 
     async function copyResponse() {
-
-        await navigator.clipboard.writeText(
-
-            result.response
-
-        );
+        if (!result) return;
+        await navigator.clipboard.writeText(result.response);
 
         setCopied(true);
 

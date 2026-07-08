@@ -1,99 +1,51 @@
 interface Props {
-  originalTokens: number
-  optimizedTokens: number
-  contextWindow: number
+  originalTokens: number;
+  optimizedTokens: number;
+  contextWindow: number;
 }
 
-export default function ChatSimulator({
-  originalTokens,
-  optimizedTokens,
-  contextWindow,
-}: Props) {
-  const originalCapacity =
-    Math.floor(
-      contextWindow / originalTokens
-    )
+export default function ChatSimulator({ originalTokens, optimizedTokens, contextWindow }: Props) {
+  const origCap  = originalTokens  > 0 ? Math.floor(contextWindow / originalTokens)  : 0;
+  const optCap   = optimizedTokens > 0 ? Math.floor(contextWindow / optimizedTokens) : 0;
+  const improvement = optCap - origCap;
 
-  const optimizedCapacity =
-    Math.floor(
-      contextWindow / optimizedTokens
-    )
-
-  const improvement =
-    optimizedCapacity -
-    originalCapacity
-
-  const originalPercent =
-    Math.min(
-      (originalTokens /
-        optimizedTokens) *
-        100,
-      100
-    )
-
-  const optimizedPercent = 55
+  // Bar widths — original is always 100%, optimised is scaled relative
+  const origPct = 100;
+  const optPct  = origCap > 0 ? Math.min((optCap / origCap) * 100, 100) : 100;
 
   return (
-    <div className="glass simulator-card">
-      <h2>
-        Conversation Simulator
-      </h2>
+    <div className="rounded-2xl border border-white/10 bg-[#101010] p-6">
+      <h2 className="mb-6 text-lg font-semibold text-white">Conversation Simulator</h2>
 
-      <div className="simulator-grid">
-
-        <div className="chat-card">
-          <h3>Original Prompt</h3>
-
-          <div className="bar-bg">
-            <div
-              className="bar-fill danger"
-              style={{
-                width: `${originalPercent}%`,
-              }}
-            />
+      <div className="grid gap-5 sm:grid-cols-2">
+        {/* Original */}
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-red-400">Original Prompt</p>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-red-500" style={{ width: `${origPct}%` }} />
           </div>
-
-          <p>
-            Capacity:
-            {" "}
-            {originalCapacity.toLocaleString()}
-          </p>
-
-          <span className="danger-text">
-            Context fills faster
-          </span>
+          <p className="mt-3 text-2xl font-bold text-white">{origCap.toLocaleString()}</p>
+          <p className="text-xs text-gray-500">messages per context</p>
+          <p className="mt-2 text-xs text-red-400">Context fills faster</p>
         </div>
 
-        <div className="chat-card">
-          <h3>Optimized Prompt</h3>
-
-          <div className="bar-bg">
-            <div
-              className="bar-fill success"
-              style={{
-                width: `${optimizedPercent}%`,
-              }}
-            />
+        {/* Optimized */}
+        <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-5">
+          <p className="text-xs font-semibold uppercase tracking-widest text-green-400">Optimized Prompt</p>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+            <div className="h-full rounded-full bg-green-500" style={{ width: `${optPct}%` }} />
           </div>
-
-          <p>
-            Capacity:
-            {" "}
-            {optimizedCapacity.toLocaleString()}
-          </p>
-
-          <span className="success-text">
-            More conversations possible
-          </span>
+          <p className="mt-3 text-2xl font-bold text-white">{optCap.toLocaleString()}</p>
+          <p className="text-xs text-gray-500">messages per context</p>
+          <p className="mt-2 text-xs text-green-400">More conversations possible</p>
         </div>
-
       </div>
 
-      <div className="simulator-banner">
-        🚀 +{improvement.toLocaleString()}
-        {" "}
-        additional prompt runs
-      </div>
+      {improvement > 0 && (
+        <div className="mt-5 rounded-xl border border-orange-500/25 bg-orange-500/10 px-5 py-3 text-center text-sm font-semibold text-orange-300">
+          🚀 +{improvement.toLocaleString()} additional prompt runs unlocked
+        </div>
+      )}
     </div>
-  )
+  );
 }

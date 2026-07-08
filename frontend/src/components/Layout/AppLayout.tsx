@@ -1,18 +1,29 @@
-import Sidebar from './Sidebar'
-import Topbar from './Topbar'
+import Sidebar from "./Sidebar";
 
-interface Props {
-	children: React.ReactNode
-}
+export default function AppLayout({
 
-export default function AppLayout({ children }: Props) {
-	return (
-		<div className="app-shell">
-			<Sidebar />
-			<main className="main-content">
-				<Topbar />
-				<div className="page-content">{children}</div>
-			</main>
-		</div>
-	)
+    children,
+
+}:{
+
+    children:React.ReactNode;
+
+}){
+
+    return(
+
+        <div className="flex min-h-screen bg-black text-white">
+
+            <Sidebar/>
+
+            <main className="flex-1 overflow-y-auto">
+
+                {children}
+
+            </main>
+
+        </div>
+
+    );
+
 }
