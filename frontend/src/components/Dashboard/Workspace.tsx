@@ -46,6 +46,11 @@ export default function Workspace() {
         confidence: response.confidence,
       });
       toast.success("Agent completed");
+
+      // Scroll to response after a short delay so the DOM has rendered
+      setTimeout(() => {
+        document.getElementById("response-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
     } else if (error !== "Stopped by user") {
       toast.error("Agent failed — check the backend");
     }

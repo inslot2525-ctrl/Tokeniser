@@ -10,7 +10,7 @@ export default function Dashboard() {
     <>
       <Hero />
 
-      <div className="mt-16 space-y-10">
+      <div id="workspace" className="mt-16 space-y-10">
         {/* Main workspace: prompt → pipeline → response */}
         <Workspace />
 

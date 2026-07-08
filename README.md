@@ -1,187 +1,383 @@
-🚀 Tokeniser
-Write Less Tokens. Chat Longer.
+# TokenWise
 
-Tokeniser is an AI-powered prompt optimization platform that intelligently compresses prompts while preserving intent, helping users maximize context windows, extend conversations, and reduce LLM costs.
+> AI-powered prompt optimization platform. Enhance, compress, route, secure, and verify LLM prompts — all in one pipeline.
 
-The Problem
+---
 
-Large Language Models operate within fixed context windows.
+## What It Does
 
-Users often write prompts like:
+TokenWise is a full-stack agentic system that sits between your prompts and your LLMs. Every prompt passes through a 5-stage pipeline before it reaches a model, and every response is verified before it reaches the user.
 
-Please act as a senior Python developer.
+```
+Input → Planner → Enhancer → Compressor → Router → LLM → Verifier → Output
+```
 
-Please write very clean and well documented code.
+---
 
-Please explain every step.
+## Key Metrics
 
-Thank you.
+| Metric | Value |
+|---|---|
+| Average token savings | ~40–60% |
+| Routing latency (local) | < 250 ms |
+| Verification accuracy | ~95% |
+| Jailbreak pattern coverage | 25+ patterns |
+| Supported attack types | Jailbreak · Prompt Injection · Data Exfiltration |
+| Local model | Gemma 3 4B (Ollama) |
+| Remote model | Gemini 2.5 Flash |
+| Cost per 1M tokens (remote) | $0.002 |
 
-These prompts contain:
+---
 
-Redundant instructions
-Excessive formatting
-Repeated phrases
-Token-heavy language
+## Pipeline Stages
 
-Over long conversations this results in:
+### 1 — Planner
+Runs on the local Gemma model. Analyses the prompt and decides which downstream tools to activate: `enhance`, `compress`, `smart_optimize`. Returns a JSON action plan with a reason.
 
-❌ Faster context exhaustion
-❌ Reduced conversation length
-❌ Higher API costs
-❌ Lower efficiency
-The Solution
+### 2 — Enhancer
+Fixes grammar, spelling, and clarity. Preserves the original meaning exactly. Powered by Gemini 2.5 Flash.
 
-Tokeniser analyzes prompts and automatically compresses them into a more token-efficient format.
+### 3 — Compressor
+Strips filler words, politeness, and redundancy. Reduces token count aggressively without changing intent.
 
-Example:
+### 4 — Smart Optimizer
+Full semantic rewrite using Gemini for maximum LLM performance. Used only when the planner decides it is needed.
 
-Before
-Please act as a senior Python developer.
+### 5 — Router
+Analyses prompt complexity and routes to:
+- **Local** — Gemma 3 4B via Ollama for simple/medium prompts (zero cost, low latency)
+- **Gemini** — Gemini 2.5 Flash for complex prompts requiring cloud intelligence
 
-Please write very clean and well documented code.
+### 6 — Verifier
+Evaluates the LLM response on 5 criteria: Correctness, Completeness, Clarity, Relevance, Grammar. Scores 0–10. If score < 8, automatically retries with Gemini.
 
-Please explain every step.
+### 7 — Risk Detector
+Pattern-based jailbreak scanner that runs on every prompt. Detects 3 attack categories across 25+ patterns. Returns risk level (LOW / MEDIUM / HIGH) and matched patterns.
 
-Thank you.
-After
-Role: Senior Python Developer
+---
 
-Requirements:
-- Clean code
-- Documentation
-- Explain steps
+## Tech Stack
 
-Result:
+### Backend
+| Layer | Technology |
+|---|---|
+| Framework | FastAPI |
+| Local LLM | Ollama + Gemma 3 4B |
+| Remote LLM | Google Gemini 2.5 Flash |
+| Tokenizer | tiktoken |
+| Server | Uvicorn |
+| Language | Python 3.11+ |
 
-114 Tokens → 75 Tokens
+### Frontend
+| Layer | Technology |
+|---|---|
+| Framework | React 19 + TypeScript |
+| Build Tool | Vite 8 |
+| Styling | Tailwind CSS v4 |
+| Routing | React Router v7 |
+| HTTP Client | Axios |
+| Charts | Recharts |
+| Animations | Framer Motion |
+| Icons | Lucide React |
+| Toasts | React Hot Toast |
+| Diff View | diff |
 
-34% Reduction
-Features
-Intelligent Prompt Compression
+---
 
-Multi-pass optimization engine:
+## API Endpoints
 
-✓ Whitespace Optimization
-✓ Redundancy Removal
-✓ Structural Rewriting
-✓ Semantic Compression
-Real-Time Token Analysis
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/agent` | Full 5-stage optimization pipeline |
+| `POST` | `/optimize` | Token compression only |
+| `POST` | `/smart-optimize` | Gemini-powered semantic rewrite + metrics |
+| `POST` | `/enhance` | Grammar and clarity improvement |
+| `POST` | `/compress` | Filler word removal |
+| `POST` | `/tokenize` | Count tokens in a prompt |
+| `POST` | `/detect-risk` | Jailbreak and injection detection |
+| `POST` | `/route` | Route analysis without full pipeline |
+| `GET` | `/dashboard` | Live analytics and request history |
 
-Supports multiple model families:
+All `POST` endpoints accept `{ "prompt": "string" }`.
 
-GPT-4o
-GPT-4 Turbo
-GPT-3.5 Turbo
-Claude 3.5 Sonnet
-Claude Opus
-Claude Haiku
-Gemini 1.5 Pro
-Gemini 1.5 Flash
-Gemini 2.0 Flash
-Token Heatmap
+---
 
-Visualizes expensive portions of prompts and highlights token-heavy sections.
+## Folder Structure
 
-Efficiency Scoring
-
-Every optimization receives:
-
-Efficiency Score
-Rank System
-Token Savings
-Compression Ratio
-
-Ranks:
-
-Bronze
-Silver
-Gold
-Platinum
-Diamond
-Budget Planner
-
-Transforms token savings into real-world impact.
-
-Example:
-
-Context Window: 200,000
-
-Original Capacity:
-9,523 Prompt Runs
-
-Optimized Capacity:
-12,500 Prompt Runs
-
-Gain:
-+2,977 Additional Runs
-Diff Viewer
-
-Shows exactly what changed.
-
-- Please explain every step
-+ Explain every step
-
-- Thank you
-One-Click Copy
-
-Copy optimized prompts directly into:
-
-ChatGPT
-Claude
-Gemini
-Cursor
-Copilot
-Perplexity
-Architecture
-Frontend
+```
+tokenwise/
 │
-├── React
-├── TypeScript
-├── Vite
-├── Lucide Icons
-└── CSS
-
-        │
-
-        ▼
-
-Backend
+├── backend/
+│   ├── app/
+│   │   ├── main.py                  # FastAPI app + CORS
+│   │   │
+│   │   ├── api/
+│   │   │   └── routes.py            # All API route definitions
+│   │   │
+│   │   ├── core/
+│   │   │   └── gemini_client.py     # Gemini SDK client
+│   │   │
+│   │   ├── engine/
+│   │   │   ├── agent.py             # Main pipeline orchestrator
+│   │   │   ├── planner.py           # Action planner (local LLM)
+│   │   │   ├── enhancer.py          # Grammar + clarity
+│   │   │   ├── compressor.py        # Token compression
+│   │   │   ├── optimizer.py         # Standard optimizer
+│   │   │   ├── smart_optimizer.py   # Gemini semantic optimizer
+│   │   │   ├── router.py            # Local vs remote routing
+│   │   │   ├── verifier.py          # Response quality scorer
+│   │   │   ├── jailbreak_detector.py# Risk detection
+│   │   │   ├── complexity_analyser.py# Prompt complexity scoring
+│   │   │   ├── confidence.py        # Confidence estimation
+│   │   │   ├── scorer.py            # Response scoring
+│   │   │   ├── tokenizer.py         # tiktoken wrapper
+│   │   │   ├── local_llm.py         # Ollama Gemma client
+│   │   │   ├── fireworks_llm.py     # Gemini remote client
+│   │   │   └── rules.py             # Rule-based filters
+│   │   │
+│   │   ├── models/
+│   │   │   └── schemas.py           # Pydantic request/response models
+│   │   │
+│   │   └── analytics/
+│   │       └── metrics.py           # In-memory request logging + dashboard
+│   │
+│   └── requirements.txt
 │
-├── FastAPI
-├── Tokenizer Engine
-├── Optimization Engine
-├── Rule Engine
-└── Scoring Engine
-Optimization Pipeline
+├── frontend/
+│   ├── src/
+│   │   ├── index.css                # Tailwind entry + global styles
+│   │   ├── main.tsx                 # React entry point
+│   │   ├── App.tsx                  # Router + AppProvider
+│   │   │
+│   │   ├── components/
+│   │   │   ├── Common/
+│   │   │   │   ├── Button.tsx       # Variant button (primary/secondary/ghost)
+│   │   │   │   ├── Card.tsx         # Glass card wrapper
+│   │   │   │   ├── Loader.tsx       # Spinner (sm/md/lg)
+│   │   │   │   ├── StatCard.tsx     # Metric stat card
+│   │   │   │   ├── GlassCard.tsx    # Backdrop blur card
+│   │   │   │   ├── Loading.tsx      # Full-screen loader
+│   │   │   │   └── ErrorToast.tsx   # Inline error toast
+│   │   │   │
+│   │   │   ├── Navbar/
+│   │   │   │   └── Navbar.tsx       # Sticky top nav with active links
+│   │   │   │
+│   │   │   ├── Hero/
+│   │   │   │   └── Hero.tsx         # Landing hero with scroll CTA
+│   │   │   │
+│   │   │   ├── Layout/
+│   │   │   │   ├── DashboardLayout.tsx  # Navbar + main wrapper
+│   │   │   │   ├── AppLayout.tsx        # Sidebar layout (alt)
+│   │   │   │   ├── Sidebar.tsx          # Nav sidebar
+│   │   │   │   └── AnimatedButton.tsx   # styled-components button
+│   │   │   │
+│   │   │   ├── Prompt/
+│   │   │   │   ├── PromptEditor.tsx  # Textarea (Ctrl+Enter to run)
+│   │   │   │   ├── PromptToolbar.tsx # Run / Stop / Enhance / Copy
+│   │   │   │   └── PromptStats.tsx   # Live char/token/savings counts
+│   │   │   │
+│   │   │   ├── Pipeline/
+│   │   │   │   └── Pipeline.tsx      # Animated 5-stage horizontal pipeline
+│   │   │   │
+│   │   │   ├── Execution/
+│   │   │   │   └── LiveExecution.tsx # Animated vertical step tracker
+│   │   │   │
+│   │   │   ├── Response/
+│   │   │   │   └── ResponseCard.tsx  # Final response with meta grid
+│   │   │   │
+│   │   │   ├── Dashboard/
+│   │   │   │   ├── Workspace.tsx         # Main container (run logic)
+│   │   │   │   ├── AnalyticsCard.tsx     # Post-run metric cards
+│   │   │   │   ├── ExecutionTimeline.tsx # Agent step timeline
+│   │   │   │   ├── Token_analytics.tsx   # Token bar + route pie chart
+│   │   │   │   ├── TokenDiff.tsx         # Word-level diff viewer
+│   │   │   │   ├── ChatWindow.tsx        # Chat-style response view
+│   │   │   │   ├── BudgetPlanner.tsx     # Context window budget
+│   │   │   │   ├── CostCalculator.tsx    # Per-model cost breakdown
+│   │   │   │   ├── OptimizationHistory.tsx # History list from context
+│   │   │   │   └── StatsCards.tsx        # Summary stat grid
+│   │   │   │
+│   │   │   ├── Optimizer/
+│   │   │   │   ├── OptimizationResult.tsx # Score, diff, before/after
+│   │   │   │   └── DiffViewer.tsx         # Word diff component
+│   │   │   │
+│   │   │   ├── Simulator/
+│   │   │   │   └── ChatSimulator.tsx  # Conversation capacity simulator
+│   │   │   │
+│   │   │   ├── TokenVisualiser/
+│   │   │   │   └── TokenHeatmap.tsx   # Word-level token heat map
+│   │   │   │
+│   │   │   └── Auth/
+│   │   │       └── LoginForm.tsx      # Login form UI
+│   │   │
+│   │   ├── context/
+│   │   │   ├── AppProvider.tsx        # Composes all providers
+│   │   │   ├── AgentContext.tsx       # Global agent state + run control
+│   │   │   ├── HistoryContext.tsx     # localStorage-backed history
+│   │   │   └── ThemeContext.tsx       # Dark/light theme toggle
+│   │   │
+│   │   ├── hooks/
+│   │   │   ├── useAgents.ts           # Agent API hook with abort support
+│   │   │   └── useTokenizer.ts        # Debounced token counter hook
+│   │   │
+│   │   ├── pages/
+│   │   │   ├── Dashboard.tsx          # Main page (Hero + Workspace)
+│   │   │   ├── OptimizerPage.tsx      # Standalone optimizer tool
+│   │   │   ├── LoginPage.tsx          # Auth page
+│   │   │   └── Settings.tsx           # Backend config + API reference
+│   │   │
+│   │   ├── services/
+│   │   │   └── api.ts                 # Typed axios functions for all endpoints
+│   │   │
+│   │   ├── types/
+│   │   │   └── api.ts                 # TypeScript interfaces for all API shapes
+│   │   │
+│   │   └── utils/
+│   │       ├── api.ts                 # Re-export of services/api
+│   │       ├── optimizerApi.ts        # Optimize + enhance helpers
+│   │       └── tokenizerApi.ts        # Token count helper
+│   │
+│   ├── index.html
+│   ├── vite.config.ts
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── extension/                         # Chrome extension (popup UI)
+│   ├── manifest.json
+│   ├── popup.html / popup.js / popup.css
+│   └── content.js
+│
+├── .env                               # GEMINI_API_KEY
+└── README.md
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- Node.js 20+
+- [Ollama](https://ollama.ai) installed and running locally
+- Gemini API key from [Google AI Studio](https://aistudio.google.com)
+
+### 1 — Clone
+
+```bash
+git clone https://github.com/your-username/tokenwise.git
+cd tokenwise
+```
+
+### 2 — Pull the local model
+
+```bash
+ollama pull gemma3:4b
+```
+
+### 3 — Backend setup
+
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
+
+pip install -r requirements.txt
+```
+
+Create a `.env` file in the project root:
+
+```env
+GEMINI_API_KEY=your_key_here
+```
+
+Start the server:
+
+```bash
+uvicorn app.main:app --reload
+# Running on http://127.0.0.1:8000
+```
+
+### 4 — Frontend setup
+
+```bash
+cd frontend
+npm install
+npm run dev
+# Running on http://localhost:5173
+```
+
+---
+
+## How the Agent Works
+
+```
 User Prompt
-      ↓
-Tokenizer
-      ↓
-Whitespace Cleanup
-      ↓
-Redundancy Removal
-      ↓
-Structural Compression
-      ↓
-Semantic Rewriting
-      ↓
-Token Scoring
-      ↓
-Optimized Prompt
-Why It Matters
+    │
+    ▼
+┌─────────────────────────────────────────────────────────┐
+│  Planner  (Gemma 3 local)                               │
+│  Decides: enhance? compress? smart_optimize?            │
+└────────────────────────────┬────────────────────────────┘
+                             │
+          ┌──────────────────┼──────────────────┐
+          ▼                  ▼                  ▼
+      Enhancer           Compressor       Smart Optimizer
+  (grammar/clarity)   (remove filler)   (Gemini rewrite)
+          │                  │                  │
+          └──────────────────┴──────────────────┘
+                             │
+                             ▼
+                     ┌──────────────┐
+                     │    Router    │
+                     │ complexity   │
+                     │  analysis   │
+                     └──────┬───────┘
+                           / \
+                          /   \
+                    Local       Gemini
+                  (Gemma 3)  (2.5 Flash)
+                          \   /
+                           \ /
+                             │
+                             ▼
+                       ┌──────────┐
+                       │ Verifier │  score 0–10
+                       └──────┬───┘
+                              │
+                    score ≥ 8 │ score < 8
+                              │      │
+                              │      ▼
+                              │  Gemini retry
+                              │      │
+                              └──────┘
+                                     │
+                                     ▼
+                               Final Response
+```
 
-Modern LLM workflows are constrained by context windows.
+---
 
-Even small reductions can create significant gains:
+## Environment Variables
 
-30% Token Reduction
+| Variable | Description | Required |
+|---|---|---|
+| `GEMINI_API_KEY` | Google Gemini API key | Yes |
 
-=
-30% Longer Conversations
+---
 
-=
-More Context Retention
+## Scripts
 
-=
-Lower API Costs
+| Command | Description |
+|---|---|
+| `uvicorn app.main:app --reload` | Start backend dev server |
+| `npm run dev` | Start frontend dev server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint check |
+
+---
+
+## License
+
+MIT

@@ -43,13 +43,17 @@ export default function Hero() {
 
       {/* CTA */}
       <div className="mt-10 flex items-center gap-4">
-        <Link
-          to="/dashboard"
+        <a
+          href="#workspace"
+          onClick={(e) => {
+            e.preventDefault();
+            document.getElementById("workspace")?.scrollIntoView({ behavior: "smooth" });
+          }}
           className="flex items-center gap-2 rounded-xl bg-orange-500 px-6 py-3 text-sm font-semibold text-white transition hover:bg-orange-400"
         >
           Start Optimizing
           <ArrowRight size={16} />
-        </Link>
+        </a>
         <Link
           to="/optimizer"
           className="rounded-xl border border-white/15 px-6 py-3 text-sm font-semibold text-gray-300 transition hover:bg-white/5"

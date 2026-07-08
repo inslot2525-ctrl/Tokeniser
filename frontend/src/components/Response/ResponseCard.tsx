@@ -8,7 +8,7 @@ export default function ResponseCard() {
 
   if (!result) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-3xl border border-white/10 bg-[#101010] py-20 text-center">
+      <div id="response-card" className="flex flex-col items-center justify-center rounded-3xl border border-white/10 bg-[#101010] py-20 text-center">
         <Brain size={52} className="text-gray-700" />
         <p className="mt-5 text-lg font-semibold text-gray-500">No response yet</p>
         <p className="mt-2 text-sm text-gray-700">Run a prompt to see results here</p>
@@ -36,7 +36,7 @@ export default function ResponseCard() {
   ];
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-[#101010] p-8">
+    <div id="response-card" className="rounded-3xl border border-white/10 bg-[#101010] p-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold text-white">Response</h2>
