@@ -15,7 +15,7 @@ const STEPS = [
 type StepStatus = "waiting" | "running" | "completed";
 
 export default function LiveExecution() {
-  const { isLoading, result } = useAgentContext();
+  const { isLoading, result, runId } = useAgentContext();
   const [current, setCurrent] = useState(-1);
 
   useEffect(() => {
@@ -29,6 +29,8 @@ export default function LiveExecution() {
       return;
     }
 
+    // reset and animate from 0
+    setCurrent(-1);
     let index = 0;
     const timer = setInterval(() => {
       setCurrent(index);
@@ -37,7 +39,7 @@ export default function LiveExecution() {
     }, 700);
 
     return () => clearInterval(timer);
-  }, [isLoading, result]);
+  }, [isLoading, result, runId]);
 
   function getStatus(index: number): StepStatus {
     if (index < current) return "completed";

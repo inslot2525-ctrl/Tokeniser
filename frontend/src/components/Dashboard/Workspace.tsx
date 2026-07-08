@@ -12,7 +12,7 @@ import ResponseCard from "../Response/ResponseCard";
 import toast from "react-hot-toast";
 
 export default function Workspace() {
-  const { prompt, setResult, setIsLoading, setError, error } = useAgentContext();
+  const { prompt, setResult, setIsLoading, error, startNewRun } = useAgentContext();
   const { execute } = useAgents();
   const { addEntry } = useHistory();
 
@@ -22,8 +22,8 @@ export default function Workspace() {
       return;
     }
 
-    setIsLoading(true);
-    setError(null);
+    // clears result + error, bumps runId, sets isLoading — all atomically
+    startNewRun();
 
     const response = await execute(prompt);
 
