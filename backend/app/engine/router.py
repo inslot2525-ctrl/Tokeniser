@@ -1,15 +1,5 @@
-from app.engine.complexity_analyser import (
-    analyze_prompt,
-)
-
-from backend.app.engine.llm_provider import (
-    local_generate,
-)
-
-from app.engine.fireworks_llm import (
-    remote_generate,
-)
-
+from app.engine.complexity_analyser import analyze_prompt
+from app.engine.llm_provider import generate
 
 LOCAL_MODELS = {
     "default": {
@@ -18,7 +8,6 @@ LOCAL_MODELS = {
         "cost": 0,
     }
 }
-
 
 REMOTE_MODELS = {
     "default": {
@@ -29,32 +18,11 @@ REMOTE_MODELS = {
 }
 
 
-def estimate_confidence(
-    difficulty: str,
-    reasoning: str,
-):
-
-    if (
-        difficulty == "Easy"
-        and reasoning == "Low"
-    ):
-        return 98
-
-    if difficulty == "Medium":
-        return 90
-
-    return 72
-
-
 def estimate_remote_cost(
     input_tokens: int,
     output_tokens: int,
 ):
-
-    total_tokens = (
-        input_tokens
-        + output_tokens
-    )
+    total_tokens = input_tokens + output_tokens
 
     return round(
         total_tokens * 0.000002,
@@ -78,25 +46,12 @@ def decide_route(analysis):
         "confidence": 95,
     }
 
-def route_prompt(
-    prompt: str,
-):
 
-    # ------------------------
-    # Analyze Prompt
-    # ------------------------
+def route_prompt(prompt: str):
 
-    analysis = analyze_prompt(
-        prompt
-    )
+    analysis = analyze_prompt(prompt)
 
-    # ------------------------
-    # Decide Route
-    # ------------------------
-
-    routing = decide_route(
-        analysis
-    )
+    routing = decide_route(analysis)
 
     estimated_cost = estimate_remote_cost(
         analysis["estimated_input_tokens"],
@@ -104,32 +59,13 @@ def route_prompt(
     )
 
     print("\n==============================")
-    print("Generating Initial Response...")
+    print("ROUTING REQUEST")
     print("==============================")
+    print(f"Recommended Route : {routing['route']}")
+    print(f"Selected Model    : {routing['model']}")
 
-    # ------------------------
-    # Generate Response
-    # ------------------------
-
-    if routing["route"] == "Local":
-
-        print("Using Local Gemma")
-
-        response = local_generate(
-            prompt
-        )
-
-    else:
-
-        print("Using Gemini")
-
-        response = remote_generate(
-            prompt
-        )
-
-    # ------------------------
-    # Return
-    # ------------------------
+    # Universal LLM Provider
+    response = generate(prompt)
 
     return {
 
