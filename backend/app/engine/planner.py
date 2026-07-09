@@ -1,8 +1,6 @@
 import json
+from app.engine.llm_provider import generate
 
-from app.engine.local_llm import (
-    local_generate,
-)
 
 
 def plan_actions(
@@ -46,7 +44,7 @@ Prompt:
 {prompt}
 """
 
-    response = local_generate(
+    response = generate(
         planner_prompt
     )
 

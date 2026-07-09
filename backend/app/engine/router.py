@@ -2,7 +2,7 @@ from app.engine.complexity_analyser import (
     analyze_prompt,
 )
 
-from app.engine.local_llm import (
+from backend.app.engine.llm_provider import (
     local_generate,
 )
 
