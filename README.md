@@ -1,4 +1,4 @@
-# TokenWise
+# Tokeniser
 
 > AI-powered prompt optimization platform. Enhance, compress, route, secure, and verify LLM prompts — all in one pipeline.
 
