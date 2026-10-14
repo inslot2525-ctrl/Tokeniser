@@ -1,292 +1,132 @@
-from app.engine.enhancer import (
-    enhance_prompt,
+"""The /agent pipeline.
+
+    risk check -> plan -> (one rewrite) -> classify + route -> answer
+               -> (verify local answers, escalate to Gemini if weak)
+
+Every LLM call the pipeline makes is counted, so the response reports net
+token savings (prompt tokens saved minus the pipeline's own overhead), not
+just how much shorter the prompt got.
+"""
+
+import logging
+
+from app import config
+from app.analytics.metrics import log_request
+from app.engine import llm
+from app.engine.complexity import analyze_prompt
+from app.engine.jailbreak_detector import detect_prompt_risk
+from app.engine.optimizer import rewrite
+from app.engine.planner import plan_actions
+from app.engine.router import call_cost, choose_backend, format_cost
+from app.engine.tokenizer import count_tokens
+from app.engine.verifier import verify_response
+
+log = logging.getLogger(__name__)
+
+BLOCKED_MESSAGE = (
+    "This prompt was blocked because it matches known jailbreak or "
+    "data-exfiltration patterns."
 )
 
-from app.engine.compressor import (
-    compress_prompt,
-)
 
-from app.engine.smart_optimizer import (
-    smart_optimize_prompt,
-)
+def run_agent(prompt: str) -> dict:
+    original_tokens = count_tokens(prompt)
+    risk = detect_prompt_risk(prompt)
 
-from app.engine.router import (
-    route_prompt,
-)
-
-from app.engine.planner import (
-    plan_actions,
-)
-
-from app.engine.verifier import (
-    verify_response,
-)
-
-from app.engine.fireworks_llm import (
-    remote_generate,
-)
-
-from app.analytics.metrics import (
-    log_request,
-)
-
-
-def run_agent(prompt: str):
-
-    original_prompt = prompt
-
-    current_prompt = prompt
+    if risk["risk"] == "HIGH":
+        log.info("Blocked prompt: %s", risk["matched_patterns"])
+        log_request(
+            route="Blocked", difficulty="-", original_tokens=original_tokens,
+            optimized_tokens=original_tokens, overhead_tokens=0,
+            verification_score=None, cost=0.0,
+        )
+        return _response(
+            prompt, prompt, "Blocked by risk detector.", ["Blocked by risk detector"],
+            route="Blocked", model="-", confidence=risk["confidence"], cost=0.0,
+            verification=None, response=BLOCKED_MESSAGE, risk=risk, analysis=None,
+            tokens=_tokens(original_tokens, original_tokens, 0),
+        )
 
     steps = []
+    calls: list[llm.LLMResult] = []  # pipeline overhead calls, not the answer itself
+    if risk["risk"] == "MEDIUM":
+        steps.append(f"Risk flagged ({risk['attack_type']}), continuing")
 
-    print("\n========== TOKENWISE AGENT ==========\n")
+    plan = plan_actions(prompt)
+    current = prompt
+    if plan["optimize"]:
+        rewritten = rewrite(prompt, "optimize")
+        calls.append(rewritten)
+        if count_tokens(rewritten.text) < original_tokens:
+            current = rewritten.text
+            steps.append(f"Prompt rewritten on {rewritten.backend}")
+        else:
+            steps.append("Rewrite was not shorter; kept original prompt")
 
-    print("Original Prompt:")
-    print(current_prompt)
+    analysis = analyze_prompt(current)
+    answer = llm.generate(current, choose_backend(analysis))
+    steps.append(f"Answered by {answer.model} ({answer.backend})")
+    answer_calls = [answer]
 
-    # -----------------------------------
-    # Planner
-    # -----------------------------------
+    verification = None
+    confidence = 100 if answer.backend == llm.REMOTE else 70
+    if answer.backend == llm.LOCAL:
+        verification, judge = verify_response(current, answer.text)
+        calls.append(judge)
+        confidence = round(verification["score"] * 10)
+        steps.append(f"Verifier scored local answer {verification['score']}/10")
 
-    plan = plan_actions(
-        current_prompt
-    )
+        if verification["score"] < config.VERIFY_THRESHOLD:
+            answer = llm.gemini_generate(current)
+            answer_calls.append(answer)
+            confidence = 100
+            steps.append("Escalated to Gemini after low verifier score")
 
-    print("\nPlanner Output:")
-    print(plan)
-
-    # -----------------------------------
-    # Enhance
-    # -----------------------------------
-
-    if plan.get(
-        "enhance",
-        False,
-    ):
-
-        current_prompt = enhance_prompt(
-            current_prompt
-        )
-
-        print("\nAfter Enhance:")
-        print(current_prompt)
-
-        steps.append(
-            "Grammar & clarity enhanced"
-        )
-
-    # -----------------------------------
-    # Compress
-    # -----------------------------------
-
-    if plan.get(
-        "compress",
-        False,
-    ):
-
-        current_prompt = compress_prompt(
-            current_prompt
-        )
-
-        print("\nAfter Compress:")
-        print(current_prompt)
-
-        steps.append(
-            "Prompt compressed"
-        )
-
-    # -----------------------------------
-    # Smart Optimize
-    # -----------------------------------
-
-    if plan.get(
-        "smart_optimize",
-        False,
-    ):
-
-        current_prompt = smart_optimize_prompt(
-            current_prompt
-        )
-
-        print("\nAfter Smart Optimize:")
-        print(current_prompt)
-
-        steps.append(
-            "Prompt optimized"
-        )
-
-    # -----------------------------------
-    # Router
-    # -----------------------------------
-
-    print("\nRouting Prompt...")
-
-    routing = route_prompt(
-        current_prompt
-    )
-
-    response = routing[
-        "response"
-    ]
-
-    print("\nModel Used:")
-    print(
-        routing[
-            "recommended_model"
-        ]
-    )
-
-    print("\nGenerated Response:")
-    print(response)
-
-    # -----------------------------------
-    # Verifier
-    # -----------------------------------
-
-    verification = verify_response(
-        current_prompt,
-        response,
-    )
-
-    print("\nVerification:")
-    print(verification)
-
-    # -----------------------------------
-    # Automatic Retry
-    # -----------------------------------
-
-    if verification[
-        "score"
-    ] < 8:
-
-        print(
-            "\nVerifier rejected response."
-        )
-
-        print(
-            "Retrying using Gemini..."
-        )
-
-        response = remote_generate(
-            current_prompt
-        )
-
-        verification = verify_response(
-            current_prompt,
-            response,
-        )
-
-        routing[
-            "route"
-        ] = "Gemini Retry"
-
-        routing[
-            "recommended_model"
-        ] = "Gemini"
-
-        routing[
-            "confidence"
-        ] = verification[
-            "score"
-        ]
-
-        steps.append(
-            "Automatic retry triggered"
-        )
-
-        print(
-            "\nRetry Verification:"
-        )
-
-        print(
-            verification
-        )
-
-    else:
-
-        print(
-            "\nVerifier accepted response."
-        )
-
-    # -----------------------------------
-    # Analytics Logging
-    # -----------------------------------
+    optimized_tokens = count_tokens(current)
+    overhead = sum(c.input_tokens + c.output_tokens for c in calls)
+    cost = sum(call_cost(c) for c in calls + answer_calls)
 
     log_request(
-
-        prompt=current_prompt,
-
-        route=routing[
-            "route"
-        ],
-
-        difficulty=routing.get(
-            "difficulty",
-            "Unknown",
-        ),
-
-        original_tokens=len(
-            original_prompt.split()
-        ),
-
-        optimized_tokens=len(
-            current_prompt.split()
-        ),
-
-        verification_score=verification.get(
-            "score",
-            0,
-        ),
-
-        estimated_cost=routing[
-            "estimated_remote_cost"
-        ],
+        route=answer.backend, difficulty=analysis["difficulty"],
+        original_tokens=original_tokens, optimized_tokens=optimized_tokens,
+        overhead_tokens=overhead,
+        verification_score=verification["score"] if verification else None,
+        cost=cost,
     )
 
-    # -----------------------------------
-    # Final Output
-    # -----------------------------------
+    return _response(
+        prompt, current, plan["reason"], steps,
+        route=answer.backend, model=answer.model, confidence=confidence, cost=cost,
+        verification=verification, response=answer.text, risk=risk, analysis=analysis,
+        tokens=_tokens(original_tokens, optimized_tokens, overhead),
+    )
 
+
+def _tokens(original: int, optimized: int, overhead: int) -> dict:
     return {
+        "original": original,
+        "optimized": optimized,
+        "saved": original - optimized,
+        "pipeline_overhead": overhead,
+        # Negative means the pipeline spent more tokens than it saved.
+        "net_saved": original - optimized - overhead,
+    }
 
-        "original_prompt":
-            original_prompt,
 
-        "processed_prompt":
-            current_prompt,
-
-        "planner_reason":
-            plan.get(
-                "reason",
-                "",
-            ),
-
-        "steps":
-            steps,
-
-        "route":
-            routing[
-                "route"
-            ],
-
-        "model":
-            routing[
-                "recommended_model"
-            ],
-
-        "confidence":
-            routing[
-                "confidence"
-            ],
-
-        "estimated_remote_cost":
-            routing[
-                "estimated_remote_cost"
-            ],
-
-        "verification":
-            verification,
-
-        "response":
-            response,
+def _response(original, processed, reason, steps, *, route, model, confidence, cost,
+              verification, response, risk, analysis, tokens) -> dict:
+    return {
+        "original_prompt": original,
+        "processed_prompt": processed,
+        "planner_reason": reason,
+        "steps": steps,
+        "route": route,
+        "model": model,
+        "confidence": confidence,
+        "estimated_remote_cost": format_cost(cost),
+        "verification": verification,
+        "response": response,
+        "risk": risk,
+        "analysis": analysis,
+        "tokens": tokens,
     }

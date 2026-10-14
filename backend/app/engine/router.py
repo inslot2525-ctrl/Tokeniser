@@ -1,105 +1,47 @@
-from app.engine.complexity_analyser import analyze_prompt
-from app.engine.llm_provider import generate
-
-LOCAL_MODELS = {
-    "default": {
-        "name": "Gemma 3 4B (Local)",
-        "latency": "Low",
-        "cost": 0,
-    }
-}
-
-REMOTE_MODELS = {
-    "default": {
-        "name": "Gemini",
-        "latency": "Medium",
-        "cost": "Token Based",
-    }
-}
+from app import config
+from app.engine import llm
+from app.engine.complexity import analyze_prompt
 
 
-def estimate_remote_cost(
-    input_tokens: int,
-    output_tokens: int,
-):
-    total_tokens = input_tokens + output_tokens
-
-    return round(
-        total_tokens * 0.000002,
-        6,
-    )
+def choose_backend(analysis: dict) -> str:
+    """MODEL_PROVIDER pins the backend; in auto mode the classifier decides."""
+    if config.MODEL_PROVIDER == "gemini":
+        return llm.REMOTE
+    if config.MODEL_PROVIDER == "ollama":
+        return llm.LOCAL
+    return llm.REMOTE if analysis["recommended_route"] == "Gemini" else llm.LOCAL
 
 
-def decide_route(analysis):
-
-    if analysis["recommended_route"] == "Gemini":
-
-        return {
-            "route": "Gemini",
-            "model": REMOTE_MODELS["default"]["name"],
-            "confidence": 95,
-        }
-
-    return {
-        "route": "Local",
-        "model": LOCAL_MODELS["default"]["name"],
-        "confidence": 95,
-    }
+def call_cost(result: llm.LLMResult) -> float:
+    if result.backend != llm.REMOTE:
+        return 0.0
+    return (
+        result.input_tokens * config.REMOTE_INPUT_PRICE_PER_M
+        + result.output_tokens * config.REMOTE_OUTPUT_PRICE_PER_M
+    ) / 1_000_000
 
 
-def route_prompt(prompt: str):
+def format_cost(cost: float) -> str:
+    return f"${cost:.6f}"
 
+
+def route_prompt(prompt: str) -> dict:
     analysis = analyze_prompt(prompt)
-
-    routing = decide_route(analysis)
-
-    estimated_cost = estimate_remote_cost(
-        analysis["estimated_input_tokens"],
-        analysis["estimated_output_tokens"],
-    )
-
-    print("\n==============================")
-    print("ROUTING REQUEST")
-    print("==============================")
-    print(f"Recommended Route : {routing['route']}")
-    print(f"Selected Model    : {routing['model']}")
-
-    # Universal LLM Provider
-    response = generate(prompt)
+    requested = choose_backend(analysis)
+    result = llm.generate(prompt, requested)
 
     return {
-
-        "category":
-            analysis["category"],
-
-        "difficulty":
-            analysis["difficulty"],
-
-        "reasoning":
-            analysis["reasoning"],
-
-        "recommended_model":
-            routing["model"],
-
-        "route":
-            routing["route"],
-
-        "confidence":
-            routing["confidence"],
-
-        "estimated_input_tokens":
-            analysis["estimated_input_tokens"],
-
-        "estimated_output_tokens":
-            analysis["estimated_output_tokens"],
-
-        "estimated_remote_cost":
-            (
-                "$0"
-                if routing["route"] == "Local"
-                else f"${estimated_cost}"
-            ),
-
-        "response":
-            response,
+        "category": analysis["category"],
+        "difficulty": analysis["difficulty"],
+        "reasoning": analysis["reasoning"],
+        "signals": analysis["signals"],
+        "requested_route": requested,
+        # The backend that actually answered. It differs from requested_route
+        # when the local model was unavailable and Gemini took over.
+        "route": result.backend,
+        "recommended_model": result.model,
+        "estimated_input_tokens": analysis["estimated_input_tokens"],
+        "estimated_output_tokens": analysis["estimated_output_tokens"],
+        "estimated_remote_cost": format_cost(call_cost(result)),
+        "response": result.text,
     }
