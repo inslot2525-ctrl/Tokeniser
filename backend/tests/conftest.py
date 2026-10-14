@@ -35,6 +35,8 @@ def isolated(tmp_path, monkeypatch):
     # Tests use the LLM rewrite path unless they opt into the compressor.
     monkeypatch.setattr(config, "COMPRESSOR", "llm")
     monkeypatch.setattr(config, "API_KEY", "")
+    # No server-side Gemini key: AI mode must get one from the request.
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
     monkeypatch.setattr(security, "limiter", security.RateLimiter(1000))
 
 

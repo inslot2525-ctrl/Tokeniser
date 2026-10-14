@@ -60,12 +60,23 @@ def test_planner_uses_lower_threshold_for_local_compression(fake_lingua):
 
 def test_agent_net_savings_equal_gross_with_local_compression(client, fake_lingua, fake_llm):
     fake_llm.remote_reply = lambda p: '{"score": 9}'
-    body = client.post("/agent", json={"prompt": LONG_PROMPT}).json()
+    body = client.post(
+        "/agent", json={"prompt": LONG_PROMPT, "mode": "ai"}, headers={"X-Gemini-Key": "k"}
+    ).json()
     tokens = body["tokens"]
     # Only the judge call counts as overhead; compression itself is free.
     assert any(compressor.NAME in step for step in body["steps"])
     assert tokens["saved"] > 0
     assert [backend for backend, _ in fake_llm.calls] == ["Local", "Gemini"]
+
+
+def test_free_mode_with_no_model_still_compresses(client, fake_lingua, fake_llm):
+    fake_llm.local_up = False
+    body = client.post("/agent", json={"prompt": LONG_PROMPT}).json()
+    assert body["route"] == "Not answered"
+    assert body["tokens"]["saved"] > 0
+    assert body["tokens"]["pipeline_overhead"] == 0
+    assert fake_llm.calls == []
 
 
 def test_llm_setting_disables_compressor(monkeypatch):
