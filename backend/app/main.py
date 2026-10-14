@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -6,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app import config
 from app.api.routes import router
+from app.engine import compressor
 from app.engine.llm import LLMError
 
 logging.basicConfig(
@@ -13,7 +15,13 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 
-app = FastAPI(title="Tokeniser API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    compressor.warm_up()
+    yield
+
+
+app = FastAPI(title="Tokeniser API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

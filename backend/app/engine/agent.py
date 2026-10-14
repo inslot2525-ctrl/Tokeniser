@@ -56,10 +56,11 @@ def run_agent(prompt: str) -> dict:
     current = prompt
     if plan["optimize"]:
         rewritten = rewrite(prompt, "optimize")
-        calls.append(rewritten)
+        if rewritten.call:
+            calls.append(rewritten.call)
         if count_tokens(rewritten.text) < original_tokens:
             current = rewritten.text
-            steps.append(f"Prompt rewritten on {rewritten.backend}")
+            steps.append(f"Prompt compressed with {rewritten.backend}")
         else:
             steps.append("Rewrite was not shorter; kept original prompt")
 

@@ -23,7 +23,7 @@ and check cheap answers before they reach the user.
 
 - **Routing by difficulty.** A rule-based classifier sends simple prompts to a local Gemma model (free) and hard ones to Gemini 2.5 Flash. It explains every decision and costs zero LLM calls.
 - **Verify, then escalate.** A Gemini judge scores local answers 0–10, and weak ones are re-answered on Gemini, so you only pay for the remote model when it's needed.
-- **One-pass prompt rewriting.** Fixes grammar and strips filler in a single call. It's skipped for short prompts, where the rewrite would cost more than it saves.
+- **Local prompt compression.** [LLMLingua-2](https://github.com/microsoft/LLMLingua), a small on-device model, removes **~42% of tokens** from typical prompts while spending **zero API tokens**. It keeps code blocks, numbers and constraint words ("not", "exactly", "must") intact. If it isn't installed, a single LLM rewrite call takes over.
 - **Net token accounting.** Every response reports the tokens the pipeline itself spent, not just how much shorter the prompt got.
 - **Jailbreak screening.** Catches common jailbreak, injection and data-exfiltration phrasings, even with odd spacing or leetspeak, and blocks high-risk prompts before any model call.
 - **Built for real traffic.** Rate limiting, optional API key, input caps, timeouts, Ollama → Gemini fallback, SQLite metrics, tests, CI and Docker.
@@ -34,8 +34,8 @@ and check cheap answers before they reach the user.
 flowchart LR
     P([Prompt]) --> R{Risk check}
     R -- high risk --> B([Blocked])
-    R -- ok --> PL{Worth<br>rewriting?}
-    PL -- yes --> RW[Rewrite]
+    R -- ok --> PL{≥ 40<br>tokens?}
+    PL -- yes --> RW[Compress<br>LLMLingua-2]
     PL -- no --> C
     RW --> C[Classify]
     C -- easy / medium --> L[Local · Gemma]
@@ -46,20 +46,19 @@ flowchart LR
     G --> O
 ```
 
-A full `/agent` request makes **1 to 4** LLM calls: an optional rewrite, the answer, and for local answers a judge call plus a possible Gemini retry. Everything else (risk check, planner, classifier) is local code.
+A full `/agent` request makes **1 to 3** LLM calls: the answer, plus a judge call and a possible Gemini retry for local answers. The risk check, planner, compressor and classifier all run locally.
 
 <img src="docs/workspace.png" alt="Prompt workspace with the processing pipeline" width="100%">
 
-### Gross savings vs. net savings
+### Why local compression
 
-Rewriting a prompt costs tokens too: the instructions, the prompt going in, and the rewrite coming out. So every `/agent` response reports both figures (values below are illustrative):
+The first version of this project optimized prompts by asking an LLM to rewrite them. That rewrite call costs the instructions, the prompt going in and the rewrite coming out, so **for a prompt sent once it consistently cost more tokens than it saved**. Every response reports the pipeline's own spend, so you can see this directly:
 
 ```json
 "tokens": { "original": 96, "optimized": 41, "saved": 55, "pipeline_overhead": 228, "net_saved": -173 }
 ```
 
-> [!NOTE]
-> For a prompt sent **once**, rewriting rarely pays for itself. It does pay off when the rewrite runs on the free local model and the answer comes from the paid one, or when the optimized prompt is **reused** (system prompts, templates). The [evaluation](#evaluation) reports the break-even reuse count.
+LLMLingua-2 fixes this: it runs on the server's CPU, so `pipeline_overhead` for compression is 0 and every saved token is a net saving. The trade-off is that it is *extractive*. It deletes words instead of rephrasing, so its output reads like notes (`"list exactly four advantages Docker containers deployment. don't mention Kubernetes"`). LLMs handle that well, but it is a reason to measure answer quality, not just token counts (see [Evaluation](#evaluation)).
 
 ## Quick start
 
@@ -77,9 +76,12 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate                 # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
+pip install -r requirements-lingua.txt    # optional: local compression (PyTorch, ~1 GB)
 cp .env.example .env                      # add your GEMINI_API_KEY
 uvicorn app.main:app --reload             # http://127.0.0.1:8000
 ```
+
+The compression model (~700 MB) downloads on first start.
 
 **Frontend** (terminal 2)
 
@@ -93,9 +95,12 @@ npm ci && npm run dev                     # http://localhost:5173
 <summary><b>Run with Docker</b></summary>
 
 ```bash
-docker build -t tokenwise-backend backend
+docker build -t tokenwise-backend backend                                # LLM-rewrite only, small image
+docker build -t tokenwise-backend --build-arg WITH_LINGUA=true backend   # bundles LLMLingua-2
 docker run -p 8000:8000 --env-file backend/.env tokenwise-backend
 ```
+
+The LLMLingua-2 image needs about 1.5 GB of RAM. On small hosts (e.g. Render's free tier), build without it and the optimizer uses the LLM rewrite.
 </details>
 
 <details>
@@ -104,7 +109,7 @@ docker run -p 8000:8000 --env-file backend/.env tokenwise-backend
 Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** and select `extension/`. If your backend isn't on `127.0.0.1:8000`, edit `API_BASE` at the top of `popup.js`.
 </details>
 
-**Tests** run offline with a fake model, so no API key is needed:
+**Tests** run offline with a fake model, so no API key is needed. The one test that loads the real compression model is skipped unless `llmlingua` is installed.
 
 ```bash
 cd backend && pytest
@@ -155,17 +160,44 @@ Illustrative values. The cost covers the Gemini judge call; the local calls are 
 
 ## Evaluation
 
-[`backend/eval/run_eval.py`](backend/eval/run_eval.py) runs 20 prompts (verbose, concise, constraint-heavy and hard) through the optimizer and measures:
+[`backend/eval/run_eval.py`](backend/eval/run_eval.py) runs 20 prompts (verbose, concise, constraint-heavy and hard) through the optimizer.
 
-- **Token reduction:** mean and median, per prompt.
-- **Overhead and net tokens:** what the rewrite call itself cost.
-- **Break-even reuse count:** how many times an optimized prompt must be reused to pay for its rewrite.
-- **Answer quality** (`--quality`): a blind, order-randomised judge compares answers to the original and rewritten prompts, to catch rewrites that drop constraints.
+### Results: LLMLingua-2 compression
+
+Measured on CPU, `COMPRESSION_RATE=0.6`. Full table and sample outputs: [`eval/results-lingua.md`](backend/eval/results-lingua.md).
+
+| | |
+|---|---|
+| Token reduction, prompts ≥ 40 tokens | **41.6%** (419 of 1,008 tokens) |
+| Token reduction, all 20 prompts | 31.4% mean · 39.7% median |
+| API tokens spent on compression | **0** |
+| Net savings on a single use | **+419 tokens** (break-even on first use) |
+| Latency | ~0.54 s per prompt (median, CPU) |
+| Short prompts (< 40 tokens) | Left unchanged by design |
+
+Sample (constraint words and numbers are preserved):
+
+```
+Before: I would like you to list exactly four advantages of using Docker containers for deployment. Please number them
+        1 to 4, keep each one to a single sentence, and please don't mention Kubernetes at all in your answer because
+        my audience doesn't know what it is.
+After:  list exactly four advantages Docker containers deployment. number 1 to 4, keep each single sentence, don't
+        mention Kubernetes answer audience doesn't know.
+```
+
+> [!IMPORTANT]
+> These numbers measure **token reduction**, not **answer quality**. The `--quality` mode checks quality by answering both versions of each prompt with Gemini and having a blind judge compare the answers. It has not been run yet, so it's still an open question whether the compressed prompts get equally good answers.
+
+### Running it
 
 ```bash
 cd backend
-python -m eval.run_eval --quality --out eval/results.md   # needs GEMINI_API_KEY
+python -m eval.run_eval --compressor lingua --out eval/results-lingua.md   # no API key needed
+python -m eval.run_eval --compressor llm                                    # LLM rewrite, for comparison
+python -m eval.run_eval --compressor lingua --quality                       # + answer quality (needs GEMINI_API_KEY)
 ```
+
+Each run reports token reduction, the optimizer's own API-token overhead, net savings, the break-even reuse count and latency.
 
 ## Configuration
 
@@ -188,6 +220,8 @@ All settings are environment variables; see [`backend/.env.example`](backend/.en
 | `VERIFY_THRESHOLD` | `8` | Local answers below this are escalated |
 | `REMOTE_INPUT_PRICE_PER_M` · `REMOTE_OUTPUT_PRICE_PER_M` | `0.30` · `2.50` | USD per 1M tokens |
 | `METRICS_DB_PATH` | `metrics.db` | SQLite file for the dashboard |
+| `COMPRESSOR` | `auto` | `auto` (LLMLingua-2 if installed, else LLM rewrite) or `llm` |
+| `COMPRESSION_RATE` | `0.6` | Fraction of tokens LLMLingua-2 keeps |
 </details>
 
 ## Project structure
@@ -204,7 +238,8 @@ backend/
     engine/
       agent.py            Pipeline orchestration + token accounting
       llm.py              Gemini / Ollama clients with fallback
-      optimizer.py        Single-call rewrite (enhance | compress | optimize)
+      compressor.py       Local LLMLingua-2 compression
+      optimizer.py        Compression, or LLM rewrite as a fallback
       planner.py          Decides whether a rewrite pays off
       complexity.py       Rule-based difficulty classifier
       router.py           Backend choice + cost
@@ -223,6 +258,8 @@ extension/                Chrome extension (Manifest V3)
 - **Pattern-based risk check.** It stops low-effort attacks for free; paraphrased ones will get through. Production use needs a trained classifier or a moderation API.
 - **Heuristic routing.** It's explainable and free but will misroute some prompts, and the verifier loop is the safety net. A natural next step is training a small classifier on logged routes and judge scores.
 - **Per-process rate limit.** Multiple workers or instances would need a shared store such as Redis.
+- **Compression quality is unmeasured.** Token savings are measured, but whether compressed prompts get equally good answers is not yet (see [Evaluation](#evaluation)). Extractive compression can drop context a model needed.
+- **Compression needs memory.** LLMLingua-2 needs ~1.5 GB of RAM and adds ~0.5 s per prompt on CPU, so it doesn't fit free-tier hosting.
 - **LLM-judge bias.** Judges favour longer answers and their own model family, so scores are a signal, not ground truth.
 - **Approximate token counts.** Counts use tiktoken `o200k_base`; Gemini and Gemma tokenize differently. Costs use the usage each API actually reports.
 

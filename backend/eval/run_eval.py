@@ -7,9 +7,10 @@ For each prompt in prompts.jsonl:
      Gemini and have a judge compare the two answers blind (order randomised),
      to check the rewrite didn't lose meaning.
 
-Usage (from backend/, with GEMINI_API_KEY set):
-    python -m eval.run_eval              # token metrics only
-    python -m eval.run_eval --quality    # + answer-quality comparison
+Usage (from backend/):
+    python -m eval.run_eval --compressor lingua   # local LLMLingua-2; no API key needed
+    python -m eval.run_eval --compressor llm      # LLM rewrite; needs GEMINI_API_KEY or Ollama
+    python -m eval.run_eval --quality             # + answer-quality comparison (needs GEMINI_API_KEY)
     python -m eval.run_eval --out eval/results.md
 """
 
@@ -18,9 +19,11 @@ import json
 import random
 import re
 import statistics
+import time
 from pathlib import Path
 
-from app.engine import llm
+from app import config
+from app.engine import compressor, llm
 from app.engine.optimizer import rewrite_with_metrics
 
 HERE = Path(__file__).parent
@@ -64,12 +67,24 @@ def main() -> None:
     parser.add_argument("--quality", action="store_true", help="also compare answer quality")
     parser.add_argument("--out", type=Path, help="write a markdown report here")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument(
+        "--compressor", choices=["auto", "llm", "lingua"], default=None,
+        help="override COMPRESSOR (llm = LLM rewrite, lingua = local LLMLingua-2)",
+    )
     args = parser.parse_args()
+
+    if args.compressor:
+        config.COMPRESSOR = args.compressor
+    if config.COMPRESSOR == "lingua" and not compressor.enabled():
+        raise SystemExit("llmlingua is not installed: pip install -r requirements-lingua.txt")
+    method = compressor.NAME if compressor.enabled() else "LLM rewrite"
+    compressor.warm_up()  # keep model loading out of the latency numbers
 
     rng = random.Random(args.seed)
     rows = []
     for line in (HERE / "prompts.jsonl").read_text(encoding="utf-8").splitlines():
         case = json.loads(line)
+        start = time.perf_counter()
         m = rewrite_with_metrics(case["prompt"], "optimize")
         row = {
             "id": case["id"],
@@ -78,30 +93,42 @@ def main() -> None:
             "saved_pct": m["savings_percent"],
             "overhead": m["overhead_tokens"],
             "net": m["saved_tokens"] - m["overhead_tokens"],
+            "ms": round((time.perf_counter() - start) * 1000),
+            "output": m["optimized"],
         }
         if args.quality:
             row["quality"] = compare(case["prompt"], m["optimized"], rng)
         rows.append(row)
         print(json.dumps(row))
 
-    report = render(rows, args.quality)
+    report = render(rows, args.quality, method)
     print("\n" + report)
     if args.out:
         args.out.write_text(report, encoding="utf-8")
 
 
-def render(rows: list[dict], quality: bool) -> str:
+def break_even(overhead: int, saved: int) -> str:
+    if saved <= 0:
+        return "Break-even: never (no tokens saved)"
+    if overhead == 0:
+        return "Break-even: first use (compression spends no API tokens)"
+    return f"Break-even reuse count: {overhead / saved:.1f}x"
+
+
+def render(rows: list[dict], quality: bool, method: str) -> str:
     total_orig = sum(r["original"] for r in rows)
     total_saved = sum(r["original"] - r["optimized"] for r in rows)
     total_overhead = sum(r["overhead"] for r in rows)
     lines = [
+        f"Method: {method}",
         f"Prompts: {len(rows)}",
         f"Mean prompt-token reduction: {statistics.mean(r['saved_pct'] for r in rows):.1f}%",
         f"Median prompt-token reduction: {statistics.median(r['saved_pct'] for r in rows):.1f}%",
         f"Total prompt tokens saved: {total_saved} of {total_orig}",
         f"Total rewrite overhead: {total_overhead} tokens",
         f"Net tokens for a single use: {total_saved - total_overhead}",
-        f"Break-even reuse count: {total_overhead / total_saved:.1f}x" if total_saved > 0 else "Break-even: never",
+        break_even(total_overhead, total_saved),
+        f"Median latency: {statistics.median(r['ms'] for r in rows)} ms",
     ]
     if quality:
         outcomes = [r["quality"] for r in rows]
@@ -111,14 +138,21 @@ def render(rows: list[dict], quality: bool) -> str:
             f"{outcomes.count('original_better')} worse"
         )
 
-    header = "| id | original | optimized | saved % | overhead | net |" + (" quality |" if quality else "")
-    sep = "|---|---:|---:|---:|---:|---:|" + ("---|" if quality else "")
+    header = "| id | original | optimized | saved % | overhead | net | ms |" + (" quality |" if quality else "")
+    sep = "|---|---:|---:|---:|---:|---:|---:|" + ("---|" if quality else "")
     table = [header, sep] + [
-        f"| {r['id']} | {r['original']} | {r['optimized']} | {r['saved_pct']} | {r['overhead']} | {r['net']} |"
+        f"| {r['id']} | {r['original']} | {r['optimized']} | {r['saved_pct']} | {r['overhead']} | {r['net']} | {r['ms']} |"
         + (f" {r['quality']} |" if quality else "")
         for r in rows
     ]
-    return "\n".join(["## Summary", "", *[f"- {l}" for l in lines], "", "## Per prompt", "", *table]) + "\n"
+    samples = [
+        f"**{r['id']}**\n\n```\n{r['output']}\n```" for r in rows if r["id"].startswith("verbose")
+    ][:3]
+    return "\n".join([
+        "## Summary", "", *[f"- {l}" for l in lines], "",
+        "## Per prompt", "", *table, "",
+        "## Sample outputs", "", *samples,
+    ]) + "\n"
 
 
 if __name__ == "__main__":

@@ -1,11 +1,13 @@
-"""Prompt rewriting: one LLM call per request, whichever mode is asked for.
+"""Prompt rewriting.
 
-The old pipeline ran enhance, compress and smart-optimize as three separate
-calls with near-identical instructions. They are now modes of a single call.
+compress/optimize use local LLMLingua-2 compression when it is installed and
+otherwise a single LLM rewrite call; enhance always uses the LLM.
 """
 
+from dataclasses import dataclass
+
 from app import config
-from app.engine import llm
+from app.engine import compressor, llm
 from app.engine.tokenizer import count_tokens
 
 MODES = {
@@ -38,16 +40,34 @@ Return ONLY the rewritten prompt, with no preamble, quotes or explanation.
 </user_prompt>"""
 
 
-def rewrite(prompt: str, mode: str = "optimize") -> llm.LLMResult:
+@dataclass
+class Rewrite:
+    text: str
+    backend: str
+    # The LLM call that produced the rewrite, or None for local compression.
+    call: llm.LLMResult | None = None
+
+    @property
+    def overhead_tokens(self) -> int:
+        return self.call.input_tokens + self.call.output_tokens if self.call else 0
+
+
+def rewrite(prompt: str, mode: str = "optimize") -> Rewrite:
     if mode not in MODES:
         raise ValueError(f"Unknown mode: {mode}")
+
+    # Shortening is done locally by LLMLingua-2 when available; it spends no
+    # API tokens. Grammar fixes (enhance) need a generative model.
+    if mode != "enhance" and compressor.enabled():
+        return Rewrite(compressor.compress(prompt), compressor.NAME)
 
     request = TEMPLATE.format(instruction=MODES[mode], prompt=prompt)
 
     # Rewriting is cheap work, so prefer the free local model; generate()
     # falls back to Gemini when Ollama is unavailable.
     backend = llm.REMOTE if config.MODEL_PROVIDER == "gemini" else llm.LOCAL
-    return llm.generate(request, backend)
+    result = llm.generate(request, backend)
+    return Rewrite(result.text, result.backend, result)
 
 
 def rewrite_with_metrics(prompt: str, mode: str = "optimize") -> dict:
@@ -73,7 +93,7 @@ def rewrite_with_metrics(prompt: str, mode: str = "optimize") -> dict:
         "optimized_tokens": optimized_tokens,
         "saved_tokens": saved_tokens,
         "savings_percent": savings_percent,
-        # Tokens the rewrite call itself consumed (instructions + prompt + output).
-        "overhead_tokens": result.input_tokens + result.output_tokens,
+        # API tokens the rewrite itself consumed; 0 for local compression.
+        "overhead_tokens": result.overhead_tokens,
         "backend": result.backend,
     }
