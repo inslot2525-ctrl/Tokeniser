@@ -1,381 +1,187 @@
 # Tokeniser
 
-> AI-powered prompt optimization platform. Enhance, compress, route, secure, and verify LLM prompts — all in one pipeline.
+> A prompt optimization and model-routing pipeline. It trims prompts, sends easy requests to a free local model and hard ones to Gemini, checks local answers before returning them, and reports what the pipeline itself cost.
+
+[![CI](https://github.com/inslot2525-ctrl/Tokeniser/actions/workflows/ci.yml/badge.svg)](https://github.com/inslot2525-ctrl/Tokeniser/actions/workflows/ci.yml)
 
 ---
 
-## What It Does
-
-TokenWise is a full-stack agentic system that sits between your prompts and your LLMs. Every prompt passes through a 5-stage pipeline before it reaches a model, and every response is verified before it reaches the user.
+## What it does
 
 ```
-Input → Planner → Enhancer → Compressor → Router → LLM → Verifier → Output
+prompt ─► risk check ─► planner ─► rewrite (optional) ─► classify ─► route
+                                                                       │
+                       ┌───────────────────────────────────────────────┤
+                       ▼                                               ▼
+                 Local (Ollama)                                  Gemini 2.5 Flash
+                       │
+                       ▼
+            Gemini judge scores it ── score < 8 ──► re-answer on Gemini
 ```
 
----
-
-
-## Key Metrics
-
-| Metric | Value |
-|---|---|
-| Average token savings | ~40–60% |
-| Routing latency (local) | < 250 ms |
-| Verification accuracy | ~95% |
-| Jailbreak pattern coverage | 25+ patterns |
-| Supported attack types | Jailbreak · Prompt Injection · Data Exfiltration |
-| Local model | Gemma 3 4B (Ollama) |
-| Remote model | Gemini 2.5 Flash |
-| Cost per 1M tokens (remote) | $0.002 |
-
----
-
-## Pipeline Stages
-
-### 1 — Planner
-Runs on the local Gemma model. Analyses the prompt and decides which downstream tools to activate: `enhance`, `compress`, `smart_optimize`. Returns a JSON action plan with a reason.
-
-### 2 — Enhancer
-Fixes grammar, spelling, and clarity. Preserves the original meaning exactly. Powered by Gemini 2.5 Flash.
-
-### 3 — Compressor
-Strips filler words, politeness, and redundancy. Reduces token count aggressively without changing intent.
-
-### 4 — Smart Optimizer
-Full semantic rewrite using Gemini for maximum LLM performance. Used only when the planner decides it is needed.
-
-### 5 — Router
-Analyses prompt complexity and routes to:
-- **Local** — Gemma 3 4B via Ollama for simple/medium prompts (zero cost, low latency)
-- **Gemini** — Gemini 2.5 Flash for complex prompts requiring cloud intelligence
-
-### 6 — Verifier
-Evaluates the LLM response on 5 criteria: Correctness, Completeness, Clarity, Relevance, Grammar. Scores 0–10. If score < 8, automatically retries with Gemini.
-
-### 7 — Risk Detector
-Pattern-based jailbreak scanner that runs on every prompt. Detects 3 attack categories across 25+ patterns. Returns risk level (LOW / MEDIUM / HIGH) and matched patterns.
-
----
-
-## Tech Stack
-
-### Backend
-| Layer | Technology |
-|---|---|
-| Framework | FastAPI |
-| Local LLM | Ollama + Gemma 3 4B |
-| Remote LLM | Google Gemini 2.5 Flash |
-| Tokenizer | tiktoken |
-| Server | Uvicorn |
-| Language | Python 3.11+ |
-
-### Frontend
-| Layer | Technology |
-|---|---|
-| Framework | React 19 + TypeScript |
-| Build Tool | Vite 8 |
-| Styling | Tailwind CSS v4 |
-| Routing | React Router v7 |
-| HTTP Client | Axios |
-| Charts | Recharts |
-| Animations | Framer Motion |
-| Icons | Lucide React |
-| Toasts | React Hot Toast |
-| Diff View | diff |
-
----
-
-## API Endpoints
-
-| Method | Path | Description |
+| Stage | How it works | LLM calls |
 |---|---|---|
-| `POST` | `/agent` | Full 5-stage optimization pipeline |
-| `POST` | `/optimize` | Token compression only |
-| `POST` | `/smart-optimize` | Gemini-powered semantic rewrite + metrics |
-| `POST` | `/enhance` | Grammar and clarity improvement |
-| `POST` | `/compress` | Filler word removal |
-| `POST` | `/tokenize` | Count tokens in a prompt |
-| `POST` | `/detect-risk` | Jailbreak and injection detection |
-| `POST` | `/route` | Route analysis without full pipeline |
-| `GET` | `/dashboard` | Live analytics and request history |
+| Risk check | Regex patterns over normalised text (case, spacing, punctuation, leetspeak). HIGH risk is blocked before any model call. | 0 |
+| Planner | Skips the rewrite for prompts under 60 tokens, because the rewrite call would cost more than it saves. | 0 |
+| Rewrite | One call that fixes grammar and removes filler. If the result isn't shorter, the original is kept. Runs on the local model when available. | 0–1 |
+| Classifier | Rule-based: length, task type (code/math/…), reasoning keywords, number of asks. Returns the signals behind each decision. | 0 |
+| Router | Easy/Medium → local model, Hard → Gemini. `MODEL_PROVIDER` can pin either one. If Ollama is down it falls back to Gemini and reports the route that *actually* answered. | 1 |
+| Verifier | Only for local answers: a Gemini judge scores 0–10, and anything under the threshold is re-answered on Gemini. | 0–2 |
 
-All `POST` endpoints accept `{ "prompt": "string" }`.
+A full `/agent` request makes **1 to 4** LLM calls (the first version made up to 8).
+
+### Honest accounting
+
+Every `/agent` response includes token accounting for the pipeline itself (illustrative values):
+
+```json
+"tokens": {
+  "original": 96, "optimized": 41, "saved": 55,
+  "pipeline_overhead": 228,
+  "net_saved": -173
+}
+```
+
+Rewriting a prompt costs tokens: the instructions, the prompt going in, and the rewrite coming out. **For a prompt you send once, optimization almost always costs more than it saves.** It pays off when:
+
+- the rewrite runs on the free local model and the answer comes from the paid remote model, or
+- the optimized prompt is reused, e.g. a system prompt or template sent thousands of times. The eval reports the break-even reuse count.
+
+The dashboard reports both gross and net savings for the same reason.
 
 ---
 
-## Folder Structure
+## Evaluation
 
-```
-tokenwise/
-│
-├── backend/
-│   ├── app/
-│   │   ├── main.py                  # FastAPI app + CORS
-│   │   │
-│   │   ├── api/
-│   │   │   └── routes.py            # All API route definitions
-│   │   │
-│   │   ├── core/
-│   │   │   └── gemini_client.py     # Gemini SDK client
-│   │   │
-│   │   ├── engine/
-│   │   │   ├── agent.py             # Main pipeline orchestrator
-│   │   │   ├── planner.py           # Action planner (local LLM)
-│   │   │   ├── enhancer.py          # Grammar + clarity
-│   │   │   ├── compressor.py        # Token compression
-│   │   │   ├── optimizer.py         # Standard optimizer
-│   │   │   ├── smart_optimizer.py   # Gemini semantic optimizer
-│   │   │   ├── router.py            # Local vs remote routing
-│   │   │   ├── verifier.py          # Response quality scorer
-│   │   │   ├── jailbreak_detector.py# Risk detection
-│   │   │   ├── complexity_analyser.py# Prompt complexity scoring
-│   │   │   ├── confidence.py        # Confidence estimation
-│   │   │   ├── scorer.py            # Response scoring
-│   │   │   ├── tokenizer.py         # tiktoken wrapper
-│   │   │   ├── local_llm.py         # Ollama Gemma client
-│   │   │   ├── fireworks_llm.py     # Gemini remote client
-│   │   │   └── rules.py             # Rule-based filters
-│   │   │
-│   │   ├── models/
-│   │   │   └── schemas.py           # Pydantic request/response models
-│   │   │
-│   │   └── analytics/
-│   │       └── metrics.py           # In-memory request logging + dashboard
-│   │
-│   └── requirements.txt
-│
-├── frontend/
-│   ├── src/
-│   │   ├── index.css                # Tailwind entry + global styles
-│   │   ├── main.tsx                 # React entry point
-│   │   ├── App.tsx                  # Router + AppProvider
-│   │   │
-│   │   ├── components/
-│   │   │   ├── Common/
-│   │   │   │   ├── Button.tsx       # Variant button (primary/secondary/ghost)
-│   │   │   │   ├── Card.tsx         # Glass card wrapper
-│   │   │   │   ├── Loader.tsx       # Spinner (sm/md/lg)
-│   │   │   │   ├── StatCard.tsx     # Metric stat card
-│   │   │   │   ├── GlassCard.tsx    # Backdrop blur card
-│   │   │   │   ├── Loading.tsx      # Full-screen loader
-│   │   │   │   └── ErrorToast.tsx   # Inline error toast
-│   │   │   │
-│   │   │   ├── Navbar/
-│   │   │   │   └── Navbar.tsx       # Sticky top nav with active links
-│   │   │   │
-│   │   │   ├── Hero/
-│   │   │   │   └── Hero.tsx         # Landing hero with scroll CTA
-│   │   │   │
-│   │   │   ├── Layout/
-│   │   │   │   ├── DashboardLayout.tsx  # Navbar + main wrapper
-│   │   │   │   ├── AppLayout.tsx        # Sidebar layout (alt)
-│   │   │   │   ├── Sidebar.tsx          # Nav sidebar
-│   │   │   │   └── AnimatedButton.tsx   # styled-components button
-│   │   │   │
-│   │   │   ├── Prompt/
-│   │   │   │   ├── PromptEditor.tsx  # Textarea (Ctrl+Enter to run)
-│   │   │   │   ├── PromptToolbar.tsx # Run / Stop / Enhance / Copy
-│   │   │   │   └── PromptStats.tsx   # Live char/token/savings counts
-│   │   │   │
-│   │   │   ├── Pipeline/
-│   │   │   │   └── Pipeline.tsx      # Animated 5-stage horizontal pipeline
-│   │   │   │
-│   │   │   ├── Execution/
-│   │   │   │   └── LiveExecution.tsx # Animated vertical step tracker
-│   │   │   │
-│   │   │   ├── Response/
-│   │   │   │   └── ResponseCard.tsx  # Final response with meta grid
-│   │   │   │
-│   │   │   ├── Dashboard/
-│   │   │   │   ├── Workspace.tsx         # Main container (run logic)
-│   │   │   │   ├── AnalyticsCard.tsx     # Post-run metric cards
-│   │   │   │   ├── ExecutionTimeline.tsx # Agent step timeline
-│   │   │   │   ├── Token_analytics.tsx   # Token bar + route pie chart
-│   │   │   │   ├── TokenDiff.tsx         # Word-level diff viewer
-│   │   │   │   ├── ChatWindow.tsx        # Chat-style response view
-│   │   │   │   ├── BudgetPlanner.tsx     # Context window budget
-│   │   │   │   ├── CostCalculator.tsx    # Per-model cost breakdown
-│   │   │   │   ├── OptimizationHistory.tsx # History list from context
-│   │   │   │   └── StatsCards.tsx        # Summary stat grid
-│   │   │   │
-│   │   │   ├── Optimizer/
-│   │   │   │   ├── OptimizationResult.tsx # Score, diff, before/after
-│   │   │   │   └── DiffViewer.tsx         # Word diff component
-│   │   │   │
-│   │   │   ├── Simulator/
-│   │   │   │   └── ChatSimulator.tsx  # Conversation capacity simulator
-│   │   │   │
-│   │   │   ├── TokenVisualiser/
-│   │   │   │   └── TokenHeatmap.tsx   # Word-level token heat map
-│   │   │   │
-│   │   │   └── Auth/
-│   │   │       └── LoginForm.tsx      # Login form UI
-│   │   │
-│   │   ├── context/
-│   │   │   ├── AppProvider.tsx        # Composes all providers
-│   │   │   ├── AgentContext.tsx       # Global agent state + run control
-│   │   │   ├── HistoryContext.tsx     # localStorage-backed history
-│   │   │   └── ThemeContext.tsx       # Dark/light theme toggle
-│   │   │
-│   │   ├── hooks/
-│   │   │   ├── useAgents.ts           # Agent API hook with abort support
-│   │   │   └── useTokenizer.ts        # Debounced token counter hook
-│   │   │
-│   │   ├── pages/
-│   │   │   ├── Dashboard.tsx          # Main page (Hero + Workspace)
-│   │   │   ├── OptimizerPage.tsx      # Standalone optimizer tool
-│   │   │   ├── LoginPage.tsx          # Auth page
-│   │   │   └── Settings.tsx           # Backend config + API reference
-│   │   │
-│   │   ├── services/
-│   │   │   └── api.ts                 # Typed axios functions for all endpoints
-│   │   │
-│   │   ├── types/
-│   │   │   └── api.ts                 # TypeScript interfaces for all API shapes
-│   │   │
-│   │   └── utils/
-│   │       ├── api.ts                 # Re-export of services/api
-│   │       ├── optimizerApi.ts        # Optimize + enhance helpers
-│   │       └── tokenizerApi.ts        # Token count helper
-│   │
-│   ├── index.html
-│   ├── vite.config.ts
-│   ├── package.json
-│   └── tsconfig.json
-│
-├── extension/                         # Chrome extension (popup UI)
-│   ├── manifest.json
-│   ├── popup.html / popup.js / popup.css
-│   └── content.js
-│
-├── .env                               # GEMINI_API_KEY
-└── README.md
-```
+`backend/eval/run_eval.py` runs 20 prompts (verbose, concise, constraint-heavy and hard) through the optimizer. It measures:
 
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.11+
-- Node.js 20+
-- [Ollama](https://ollama.ai) installed and running locally
-- Gemini API key from [Google AI Studio](https://aistudio.google.com)
-
-### 1 — Clone
-
-```bash
-git clone https://github.com/your-username/tokenwise.git
-cd tokenwise
-```
-
-### 2 — Pull the local model
-
-```bash
-ollama pull gemma3:4b
-```
-
-### 3 — Backend setup
+- prompt-token reduction (mean and median),
+- rewrite overhead and net tokens,
+- the break-even reuse count,
+- with `--quality`: a blind pairwise judge comparing answers to the original vs. the rewritten prompt, to catch rewrites that drop constraints.
 
 ```bash
 cd backend
-python -m venv venv
-venv\Scripts\activate          # Windows
-# source venv/bin/activate     # macOS/Linux
-
-pip install -r requirements.txt
+python -m eval.run_eval --quality --out eval/results.md
 ```
 
-Create a `.env` file in the project root:
+> **Results:** run the command above with your API key and paste the summary here. Don't quote numbers that weren't measured.
 
-```env
-GEMINI_API_KEY=your_key_here
+---
+
+## API
+
+All `POST` endpoints take `{ "prompt": "string" }`. LLM-backed endpoints are rate limited per IP and accept an `X-API-Key` header when `API_KEY` is set.
+
+| Method | Path | Description | LLM |
+|---|---|---|---|
+| `POST` | `/agent` | Full pipeline: risk → plan → rewrite → route → verify | ✓ |
+| `POST` | `/smart-optimize` | Grammar fix + compression, with token metrics | ✓ |
+| `POST` | `/optimize` | Aggressive compression, with token metrics | ✓ |
+| `POST` | `/compress` | Same as `/optimize`, also returns `compressed` | ✓ |
+| `POST` | `/enhance` | Grammar and clarity only, also returns `enhanced` | ✓ |
+| `POST` | `/route` | Classify, route and answer | ✓ |
+| `POST` | `/tokenize` | Token count (tiktoken `o200k_base`) | |
+| `POST` | `/detect-risk` | Jailbreak / injection / exfiltration check | |
+| `GET` | `/dashboard` | Totals, gross and net savings, route mix, recent requests | |
+| `GET` | `/health` | Liveness check | |
+
+Token counts use tiktoken's `o200k_base` (the GPT-4o encoding). Gemini and Gemma use different tokenizers, so the counts are a consistent approximation for comparing prompts, not exact billing numbers. Cost estimates use the token usage the model API actually reports.
+
+---
+
+## Project layout
+
+```
+backend/
+  app/
+    main.py              FastAPI app, CORS, error handling
+    config.py            All settings, read from env
+    api/routes.py        Endpoints
+    api/security.py      API key + per-IP rate limiter
+    engine/
+      agent.py           Pipeline orchestration + token accounting
+      llm.py             Gemini / Ollama clients, fallback, usage tracking
+      optimizer.py       Single-call rewrite (enhance | compress | optimize)
+      planner.py         Decides whether a rewrite is worth it
+      complexity.py      Rule-based difficulty classifier
+      router.py          Backend choice + cost
+      verifier.py        LLM-as-judge for local answers
+      jailbreak_detector.py
+      tokenizer.py
+    analytics/metrics.py SQLite request log + dashboard
+    models/schemas.py    Request validation (length cap, non-blank)
+  tests/                 pytest suite; LLMs are faked, no network needed
+  eval/                  Prompt set + evaluation script
+  Dockerfile
+frontend/                React 19 + TypeScript + Vite + Tailwind
+extension/               Chrome extension popup (MV3)
 ```
 
-Start the server:
+---
+
+## Running locally
+
+Prerequisites: Python 3.11+, Node 20+, a [Gemini API key](https://aistudio.google.com), and optionally [Ollama](https://ollama.com) for the local route.
 
 ```bash
-uvicorn app.main:app --reload
-# Running on http://127.0.0.1:8000
-```
+# Local model (optional; without it everything routes to Gemini)
+ollama pull gemma3:4b
 
-### 4 — Frontend setup
+# Backend
+cd backend
+python -m venv .venv
+.venv\Scripts\activate            # Windows  (source .venv/bin/activate on macOS/Linux)
+pip install -r requirements-dev.txt
+cp .env.example .env              # then set GEMINI_API_KEY
+uvicorn app.main:app --reload     # http://127.0.0.1:8000
+pytest                            # run tests
 
-```bash
+# Frontend
 cd frontend
-npm install
-npm run dev
-# Running on http://localhost:5173
+cp .env.example .env
+npm ci
+npm run dev                       # http://localhost:5173
 ```
+
+Or run the backend with Docker:
+
+```bash
+docker build -t tokeniser-backend backend
+docker run -p 8000:8000 --env-file backend/.env tokeniser-backend
+```
+
+To use the Chrome extension, open `chrome://extensions`, enable Developer mode, click **Load unpacked** and select `extension/`. Set `API_BASE` at the top of `popup.js` if your backend isn't on `127.0.0.1:8000`.
 
 ---
 
-## How the Agent Works
+## Configuration
 
-```
-User Prompt
-    │
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│  Planner  (Gemma 3 local)                               │
-│  Decides: enhance? compress? smart_optimize?            │
-└────────────────────────────┬────────────────────────────┘
-                             │
-          ┌──────────────────┼──────────────────┐
-          ▼                  ▼                  ▼
-      Enhancer           Compressor       Smart Optimizer
-  (grammar/clarity)   (remove filler)   (Gemini rewrite)
-          │                  │                  │
-          └──────────────────┴──────────────────┘
-                             │
-                             ▼
-                     ┌──────────────┐
-                     │    Router    │
-                     │ complexity   │
-                     │  analysis   │
-                     └──────┬───────┘
-                           / \
-                          /   \
-                    Local       Gemini
-                  (Gemma 3)  (2.5 Flash)
-                          \   /
-                           \ /
-                             │
-                             ▼
-                       ┌──────────┐
-                       │ Verifier │  score 0–10
-                       └──────┬───┘
-                              │
-                    score ≥ 8 │ score < 8
-                              │      │
-                              │      ▼
-                              │  Gemini retry
-                              │      │
-                              └──────┘
-                                     │
-                                     ▼
-                               Final Response
-```
+See [`backend/.env.example`](backend/.env.example).
 
----
-
-## Environment Variables
-
-| Variable | Description | Required |
+| Variable | Default | Purpose |
 |---|---|---|
-| `GEMINI_API_KEY` | Google Gemini API key | Yes |
+| `GEMINI_API_KEY` | — | Required for the remote route, the verifier and the fallback |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Remote model |
+| `MODEL_PROVIDER` | `auto` | `auto` (router decides), `gemini`, or `ollama` |
+| `OLLAMA_URL` / `OLLAMA_MODEL` | `localhost:11434` / `gemma3:4b` | Local model |
+| `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed origins |
+| `API_KEY` | empty (off) | Require `X-API-Key` on LLM endpoints |
+| `RATE_LIMIT_PER_MINUTE` | `20` | Per-IP limit on LLM endpoints (in-process) |
+| `MAX_PROMPT_CHARS` | `8000` | Reject longer prompts |
+| `LLM_TIMEOUT_SECONDS` | `60` | Per-call timeout |
+| `VERIFY_THRESHOLD` | `8` | Local answers scoring below this are escalated |
+| `REMOTE_INPUT_PRICE_PER_M` / `REMOTE_OUTPUT_PRICE_PER_M` | `0.30` / `2.50` | USD per 1M tokens, for cost estimates |
+| `METRICS_DB_PATH` | `metrics.db` | SQLite file for the dashboard |
 
 ---
 
-## Scripts
+## Known limitations
 
-| Command | Description |
-|---|---|
-| `uvicorn app.main:app --reload` | Start backend dev server |
-| `npm run dev` | Start frontend dev server |
-| `npm run build` | Production build |
-| `npm run lint` | ESLint check |
+- **The risk detector is a pattern filter, not a classifier.** It stops low-effort attacks for free, but paraphrased attacks will get through. A production system would add a trained classifier or a moderation API.
+- **The classifier is heuristic.** It's explainable and free, but it will misroute some prompts. The verifier-escalation loop is the safety net. A natural next step is training a small classifier on logged routes and verifier scores.
+- **The rate limiter is per-process.** Multiple workers or instances would need a shared store such as Redis.
+- **The LLM judge has known biases** (towards longer answers, and towards its own model family). Scores are a signal, not ground truth.
 
 ---
 
