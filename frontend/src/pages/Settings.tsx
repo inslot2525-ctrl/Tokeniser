@@ -56,7 +56,7 @@ export default function Settings() {
               { label: "Total Requests",   value: stats.total_requests },
               { label: "Tokens Saved",     value: stats.total_tokens_saved?.toLocaleString() },
               { label: "Avg Savings",      value: `${stats.avg_savings_percent?.toFixed(1)}%` },
-              { label: "Routes",           value: Object.keys(stats.route_distribution ?? {}).join(", ") || "—" },
+              { label: "Net After Overhead", value: stats.net_tokens_saved?.toLocaleString() },
             ].map((s) => (
               <div key={s.label} className="rounded-xl border border-white/10 bg-white/5 p-4">
                 <p className="text-xs text-gray-500">{s.label}</p>
