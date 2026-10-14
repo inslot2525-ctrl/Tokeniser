@@ -7,12 +7,13 @@ import type {
   DashboardStats,
 } from "../types/api";
 
-console.log("API URL =", import.meta.env.VITE_API_URL);
-
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: {
     "Content-Type": "application/json",
+    // Only needed when the backend sets API_KEY. A key shipped in a browser
+    // bundle is not secret; rate limiting is what protects a public deploy.
+    ...(import.meta.env.VITE_API_KEY && { "X-API-Key": import.meta.env.VITE_API_KEY }),
   },
 });
 const body = (prompt: string) => ({ prompt });

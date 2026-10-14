@@ -2,44 +2,36 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, LoaderCircle, Circle } from "lucide-react";
 import { useAgentContext } from "../../context/AgentContext";
 
-const STEPS = [
-  "Planner",
-  "Enhancer",
-  "Compressor",
-  "Optimizer",
-  "Risk Detector",
-  "Router",
-  "Verifier",
-];
+// Shown while a request is in flight. Once the response arrives, the list is
+// replaced by the steps the backend actually ran.
+const PENDING_STEPS = ["Risk check", "Planner", "Rewrite", "Router", "Verifier"];
 
 type StepStatus = "waiting" | "running" | "completed";
 
 export default function LiveExecution() {
   const { isLoading, result, runId } = useAgentContext();
-  const [current, setCurrent] = useState(-1);
+  // Progress is keyed by run, so a new run starts at -1 without a reset render.
+  const [progress, setProgress] = useState({ runId, index: -1 });
 
   useEffect(() => {
-    if (!isLoading && !result) {
-      setCurrent(-1);
-      return;
-    }
+    if (!isLoading || result) return;
 
-    if (result) {
-      setCurrent(STEPS.length); // all complete
-      return;
-    }
-
-    // reset and animate from 0
-    setCurrent(-1);
     let index = 0;
     const timer = setInterval(() => {
-      setCurrent(index);
+      setProgress({ runId, index });
       index++;
-      if (index === STEPS.length) clearInterval(timer);
+      if (index === PENDING_STEPS.length) clearInterval(timer);
     }, 700);
 
     return () => clearInterval(timer);
   }, [isLoading, result, runId]);
+
+  const STEPS = result?.steps?.length ? result.steps : PENDING_STEPS;
+  const current = result
+    ? STEPS.length
+    : isLoading && progress.runId === runId
+    ? progress.index
+    : -1;
 
   function getStatus(index: number): StepStatus {
     if (index < current) return "completed";

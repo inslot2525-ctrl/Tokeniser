@@ -1,9 +1,0 @@
-@media (max-width: 900px) {
-	.app-shell {
-		flex-direction: column;
-	}
-
-	.main-content {
-		padding: 20px;
-	}
-}

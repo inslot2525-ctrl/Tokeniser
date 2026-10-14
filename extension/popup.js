@@ -1,3 +1,6 @@
+// Point this at your deployed backend to use the extension without running it locally.
+const API_BASE = "http://127.0.0.1:8000";
+
 const originalTokens =
   document.getElementById(
     "originalTokens"
@@ -77,7 +80,7 @@ enhanceBtn.addEventListener(
     try {
       const response =
         await fetch(
-          "http://127.0.0.1:8000/enhance",
+          `${API_BASE}/enhance`,
           {
             method: "POST",
             headers: {
@@ -122,7 +125,7 @@ compressBtn.addEventListener(
     try {
       const response =
         await fetch(
-          "http://127.0.0.1:8000/compress",
+          `${API_BASE}/compress`,
           {
             method: "POST",
             headers: {
@@ -164,7 +167,7 @@ smartBtn.addEventListener(
     try {
       const response =
         await fetch(
-          "http://127.0.0.1:8000/smart-optimize",
+          `${API_BASE}/smart-optimize`,
           {
             method: "POST",
             headers: {

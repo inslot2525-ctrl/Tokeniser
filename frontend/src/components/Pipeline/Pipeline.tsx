@@ -11,41 +11,36 @@ import { useEffect, useState } from "react";
 import { useAgentContext } from "../../context/AgentContext";
 
 const STAGES = [
-  { title: "Planner",   desc: "Analyse intent & complexity",  icon: Brain },
-  { title: "Enhancer",  desc: "Grammar & clarity pass",       icon: Sparkles },
-  { title: "Optimizer", desc: "Token compression",            icon: Minimize2 },
-  { title: "Router",    desc: "Select optimal model",         icon: Route },
+  { title: "Risk check", desc: "Jailbreak & injection scan",   icon: Brain },
+  { title: "Planner",   desc: "Decide if a rewrite pays off", icon: Sparkles },
+  { title: "Rewrite",   desc: "One-pass prompt optimization", icon: Minimize2 },
+  { title: "Router",    desc: "Pick local or remote model",   icon: Route },
   { title: "Verifier",  desc: "Validate & score response",    icon: ShieldCheck },
 ];
 
 export default function Pipeline() {
   const { result, isLoading, runId } = useAgentContext();
-  const [activeStage, setActiveStage] = useState(-1);
+  // Progress is keyed by run, so a new run starts at -1 without a reset render.
+  const [progress, setProgress] = useState({ runId, stage: -1 });
 
   useEffect(() => {
-    // Stopped or idle — reset to blank
-    if (!isLoading && !result) {
-      setActiveStage(-1);
-      return;
-    }
+    if (!isLoading || result) return;
 
-    // Done — freeze all complete
-    if (result) {
-      setActiveStage(STAGES.length);
-      return;
-    }
-
-    // New run started — reset then animate
-    setActiveStage(-1);
     let current = 0;
     const interval = setInterval(() => {
-      setActiveStage(current);
+      setProgress({ runId, stage: current });
       current++;
       if (current >= STAGES.length) clearInterval(interval);
     }, 600);
 
     return () => clearInterval(interval);
   }, [isLoading, result, runId]);
+
+  const activeStage = result
+    ? STAGES.length
+    : isLoading && progress.runId === runId
+    ? progress.stage
+    : -1;
 
   return (
     <div className="rounded-3xl border border-white/10 bg-[#101010] p-8">
