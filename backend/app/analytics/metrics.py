@@ -1,129 +1,73 @@
-from datetime import datetime
+"""Request metrics, persisted in SQLite so they survive restarts and are
+shared across worker processes."""
 
-metrics = []
+import sqlite3
+import threading
+from contextlib import closing
+from datetime import datetime, timezone
 
+from app import config
 
-def log_request(
-    prompt,
-    route,
-    difficulty,
-    original_tokens,
-    optimized_tokens,
-    verification_score,
-    estimated_cost,
-):
+_lock = threading.Lock()
 
-    metrics.append({
-
-        "timestamp":
-            datetime.now().strftime(
-                "%H:%M:%S"
-            ),
-
-        "route":
-            route,
-
-        "difficulty":
-            difficulty,
-
-        "original_tokens":
-            original_tokens,
-
-        "optimized_tokens":
-            optimized_tokens,
-
-        "tokens_saved":
-            original_tokens
-            - optimized_tokens,
-
-        "verification_score":
-            verification_score,
-
-        "estimated_cost":
-            estimated_cost,
-    })
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS requests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    route TEXT NOT NULL,
+    difficulty TEXT NOT NULL,
+    original_tokens INTEGER NOT NULL,
+    optimized_tokens INTEGER NOT NULL,
+    overhead_tokens INTEGER NOT NULL,
+    verification_score REAL,
+    cost REAL NOT NULL
+)
+"""
 
 
-def get_dashboard():
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(config.METRICS_DB_PATH, timeout=10)
+    conn.row_factory = sqlite3.Row
+    conn.execute(SCHEMA)
+    return conn
 
-    if len(metrics) == 0:
 
-        return {
-            "requests": 0
-        }
-
-    total_saved = sum(
-        m["tokens_saved"]
-        for m in metrics
-    )
-
-    total_cost = 0
-
-    for m in metrics:
-
-        try:
-
-            total_cost += float(
-                str(
-                    m["estimated_cost"]
-                ).replace("$", "")
-            )
-
-        except:
-
-            pass
-
-    local = sum(
-        1
-        for m in metrics
-        if m["route"] == "Local"
-    )
-
-    remote = len(metrics) - local
-
-    avg_score = round(
-
-        sum(
-            m["verification_score"]
-            for m in metrics
+def log_request(*, route, difficulty, original_tokens, optimized_tokens,
+                overhead_tokens, verification_score, cost) -> None:
+    with _lock, closing(_connect()) as conn, conn:
+        conn.execute(
+            "INSERT INTO requests (timestamp, route, difficulty, original_tokens,"
+            " optimized_tokens, overhead_tokens, verification_score, cost)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (datetime.now(timezone.utc).isoformat(timespec="seconds"), route, difficulty,
+             original_tokens, optimized_tokens, overhead_tokens, verification_score, cost),
         )
 
-        / len(metrics),
 
-        2,
-    )
+def get_dashboard() -> dict:
+    with _lock, closing(_connect()) as conn:
+        totals = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(original_tokens), 0) AS orig,"
+            " COALESCE(SUM(original_tokens - optimized_tokens), 0) AS saved,"
+            " COALESCE(SUM(overhead_tokens), 0) AS overhead,"
+            " COALESCE(SUM(cost), 0) AS cost,"
+            " AVG(verification_score) AS avg_score FROM requests"
+        ).fetchone()
+        routes = dict(conn.execute("SELECT route, COUNT(*) FROM requests GROUP BY route").fetchall())
+        history = [dict(r) for r in conn.execute(
+            "SELECT * FROM requests ORDER BY id DESC LIMIT 20"
+        ).fetchall()]
 
+    n = totals["n"]
     return {
-
-        "requests":
-            len(metrics),
-
-        "local_routes":
-            local,
-
-        "remote_routes":
-            remote,
-
-        "local_percentage":
-            round(
-                local
-                / len(metrics)
-                * 100,
-                2,
-            ),
-
-        "tokens_saved":
-            total_saved,
-
-        "estimated_remote_cost":
-            round(
-                total_cost,
-                5,
-            ),
-
-        "average_verification":
-            avg_score,
-
-        "history":
-            metrics[-20:],
+        "total_requests": n,
+        "total_tokens_saved": totals["saved"],
+        "pipeline_overhead_tokens": totals["overhead"],
+        "net_tokens_saved": totals["saved"] - totals["overhead"],
+        "avg_savings_percent": round(totals["saved"] / totals["orig"] * 100, 2) if totals["orig"] else 0.0,
+        "route_distribution": routes,
+        "local_percentage": round(routes.get("Local", 0) / n * 100, 2) if n else 0.0,
+        "estimated_remote_cost": round(totals["cost"], 6),
+        "average_verification": round(totals["avg_score"], 2) if totals["avg_score"] is not None else None,
+        "history": history,
     }

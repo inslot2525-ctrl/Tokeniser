@@ -1,159 +1,72 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends
 
-from app.engine.jailbreak_detector import (
-    detect_prompt_risk,
-)
+from app.analytics.metrics import get_dashboard
+from app.api.security import rate_limit, require_api_key
+from app.engine.agent import run_agent
+from app.engine.jailbreak_detector import detect_prompt_risk
+from app.engine.optimizer import rewrite_with_metrics
+from app.engine.router import route_prompt
+from app.engine.tokenizer import count_tokens
+from app.models.schemas import OptimizationResponse, PromptRequest, TokenResponse
 
-from app.engine.smart_optimizer import (
-    smart_optimize_prompt,
-    smart_optimize_with_metrics,
-)
-from app.engine.smart_optimizer import (
-    smart_optimize_prompt,
-)
-
-from app.models.schemas import (
-    PromptRequest,
-    TokenResponse,
-    OptimizationResponse,
-)
-
-from app.engine.tokenizer import (
-    count_tokens,
-)
-
-from app.engine.optimizer import (
-    optimize_prompt,
-)
-
-from app.engine.enhancer import (
-    enhance_prompt,
-)
-
-from app.engine.router import (
-    route_prompt,
-)
-
-from app.engine.agent import (
-    run_agent,
-)
-
-from app.engine.agent import (
-    run_agent,
-)
-
-from app.engine.compressor import (
-    compress_prompt,
-)
-
-from app.analytics.metrics import (
-    get_dashboard,
-)
 router = APIRouter()
+
+# Endpoints that call an LLM are rate limited; the cheap local ones are not.
+llm_guard = [Depends(require_api_key), Depends(rate_limit)]
 
 
 @router.get("/")
 def home():
-    return {
-        "message": "Tokeniser API running"
-    }
+    return {"message": "Tokeniser API running"}
 
 
-@router.post(
-    "/tokenize",
-    response_model=TokenResponse
-)
-def tokenize_prompt(
-    payload: PromptRequest
-):
-    token_count = count_tokens(
-        payload.prompt
-    )
-
-    return {
-        "tokens": token_count
-    }
+@router.get("/health")
+def health():
+    return {"status": "ok"}
 
 
-@router.post(
-    "/optimize",
-    response_model=OptimizationResponse
-)
-def optimize(
-    payload: PromptRequest
-):
-    return optimize_prompt(
-        payload.prompt
-    )
-
-
-@router.post("/enhance")
-def enhance(payload: PromptRequest):
-    try:
-        enhanced_text = enhance_prompt(
-            payload.prompt
-        )
-
-        return {
-            "enhanced": enhanced_text
-        }
-
-    except Exception as e:
-        print("ENHANCE ERROR:", repr(e))
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
-        
-@router.post("/compress")
-def compress(payload: PromptRequest):
-    return compress_prompt (
-        payload.prompt
-    )
-
-
-@router.post("/smart-optimize")
-def smart_optimize(
-    payload: PromptRequest,
-):
-    return smart_optimize_with_metrics(
-        payload.prompt
-    )
+@router.post("/tokenize", response_model=TokenResponse)
+def tokenize(payload: PromptRequest):
+    return {"tokens": count_tokens(payload.prompt)}
 
 
 @router.post("/detect-risk")
-def detect_risk(
-    payload: PromptRequest
-):
-    result = detect_prompt_risk(
-        payload.prompt
-    )
+def detect_risk(payload: PromptRequest):
+    return detect_prompt_risk(payload.prompt)
 
-    return result
 
-@router.post("/route")
-def route(
-    payload: PromptRequest,
-):
-    return route_prompt(
-        payload.prompt
-    )
-    
-@router.post("/agent")
+@router.post("/optimize", response_model=OptimizationResponse, dependencies=llm_guard)
+def optimize(payload: PromptRequest):
+    return rewrite_with_metrics(payload.prompt, "compress")
+
+
+@router.post("/smart-optimize", response_model=OptimizationResponse, dependencies=llm_guard)
+def smart_optimize(payload: PromptRequest):
+    return rewrite_with_metrics(payload.prompt, "optimize")
+
+
+@router.post("/compress", dependencies=llm_guard)
+def compress(payload: PromptRequest):
+    result = rewrite_with_metrics(payload.prompt, "compress")
+    return {"compressed": result["optimized"], **result}
+
+
+@router.post("/enhance", dependencies=llm_guard)
+def enhance(payload: PromptRequest):
+    result = rewrite_with_metrics(payload.prompt, "enhance")
+    return {"enhanced": result["optimized"], **result}
+
+
+@router.post("/route", dependencies=llm_guard)
+def route(payload: PromptRequest):
+    return route_prompt(payload.prompt)
+
+
+@router.post("/agent", dependencies=llm_guard)
 def agent(payload: PromptRequest):
+    return run_agent(payload.prompt)
 
-    return run_agent(
-        payload.prompt
-    )
-    
-@router.post("/agent")
-def agent(
-    payload: PromptRequest
-):
-    return run_agent(
-        payload.prompt
-    )
-    
+
 @router.get("/dashboard")
 def dashboard():
     return get_dashboard()
