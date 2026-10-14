@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends
+from contextlib import contextmanager
 
+from fastapi import APIRouter, Depends, Header, HTTPException
+
+from app import config
 from app.analytics.metrics import get_dashboard
 from app.api.security import rate_limit, require_api_key
+from app.engine import llm
 from app.engine.agent import run_agent
 from app.engine.jailbreak_detector import detect_prompt_risk
 from app.engine.optimizer import rewrite_with_metrics
@@ -11,8 +15,32 @@ from app.models.schemas import OptimizationResponse, PromptRequest, TokenRespons
 
 router = APIRouter()
 
-# Endpoints that call an LLM are rate limited; the cheap local ones are not.
+# Endpoints that can call a model are rate limited; the cheap local ones are not.
 llm_guard = [Depends(require_api_key), Depends(rate_limit)]
+
+
+def gemini_key(x_gemini_key: str | None = Header(default=None, max_length=200)) -> str | None:
+    """The caller's own Gemini key. It is used for this request only and is
+    never logged or stored."""
+    return x_gemini_key.strip() if x_gemini_key else None
+
+
+@contextmanager
+def model_session(payload: PromptRequest, user_key: str | None):
+    if payload.mode == "free":
+        with llm.session(api_key=None, allow_remote=False):
+            yield
+    else:
+        # GEMINI_API_KEY on the server is a fallback for self-hosting; leave it
+        # unset on a public deploy so users can't spend it.
+        key = user_key or config.GEMINI_API_KEY
+        if not key:
+            raise HTTPException(
+                status_code=400,
+                detail="AI mode needs a Gemini API key. Add yours in Settings, or use free mode.",
+            )
+        with llm.session(api_key=key, allow_remote=True):
+            yield
 
 
 @router.get("/")
@@ -36,35 +64,41 @@ def detect_risk(payload: PromptRequest):
 
 
 @router.post("/optimize", response_model=OptimizationResponse, dependencies=llm_guard)
-def optimize(payload: PromptRequest):
-    return rewrite_with_metrics(payload.prompt, "compress")
+def optimize(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    with model_session(payload, key):
+        return rewrite_with_metrics(payload.prompt, "compress")
 
 
 @router.post("/smart-optimize", response_model=OptimizationResponse, dependencies=llm_guard)
-def smart_optimize(payload: PromptRequest):
-    return rewrite_with_metrics(payload.prompt, "optimize")
+def smart_optimize(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    with model_session(payload, key):
+        return rewrite_with_metrics(payload.prompt, "optimize")
 
 
 @router.post("/compress", dependencies=llm_guard)
-def compress(payload: PromptRequest):
-    result = rewrite_with_metrics(payload.prompt, "compress")
+def compress(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    with model_session(payload, key):
+        result = rewrite_with_metrics(payload.prompt, "compress")
     return {"compressed": result["optimized"], **result}
 
 
 @router.post("/enhance", dependencies=llm_guard)
-def enhance(payload: PromptRequest):
-    result = rewrite_with_metrics(payload.prompt, "enhance")
+def enhance(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    with model_session(payload, key):
+        result = rewrite_with_metrics(payload.prompt, "enhance")
     return {"enhanced": result["optimized"], **result}
 
 
 @router.post("/route", dependencies=llm_guard)
-def route(payload: PromptRequest):
-    return route_prompt(payload.prompt)
+def route(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    with model_session(payload, key):
+        return route_prompt(payload.prompt)
 
 
 @router.post("/agent", dependencies=llm_guard)
-def agent(payload: PromptRequest):
-    return run_agent(payload.prompt)
+def agent(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    with model_session(payload, key):
+        return run_agent(payload.prompt)
 
 
 @router.get("/dashboard")

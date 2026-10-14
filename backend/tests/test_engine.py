@@ -45,7 +45,8 @@ def test_provider_setting_overrides_classifier(monkeypatch):
 
 def test_route_reports_backend_that_actually_answered(fake_llm):
     fake_llm.local_up = False
-    result = route_prompt("What is 2 + 2?")
+    with llm.session(api_key="k", allow_remote=True):
+        result = route_prompt("What is 2 + 2?")
     assert result["requested_route"] == "Local"
     assert result["route"] == "Gemini"
     assert result["estimated_remote_cost"] != "$0.000000"

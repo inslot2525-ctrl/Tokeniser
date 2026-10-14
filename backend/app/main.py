@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from app import config
 from app.api.routes import router
 from app.engine import compressor
-from app.engine.llm import LLMError
+from app.engine.llm import InvalidKey, LLMError, ModelUnavailable
 
 logging.basicConfig(
     level=logging.INFO,
@@ -28,8 +28,19 @@ app.add_middleware(
     allow_origins=config.CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type", "X-API-Key"],
+    allow_headers=["Content-Type", "X-API-Key", "X-Gemini-Key"],
 )
+
+
+@app.exception_handler(ModelUnavailable)
+def model_unavailable_handler(request: Request, exc: ModelUnavailable):
+    # Our own message, safe to show: tells the user how to get a model.
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(InvalidKey)
+def invalid_key_handler(request: Request, exc: InvalidKey):
+    return JSONResponse(status_code=401, content={"detail": str(exc)})
 
 
 @app.exception_handler(LLMError)

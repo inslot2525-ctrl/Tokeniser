@@ -55,23 +55,48 @@ def run_agent(prompt: str) -> dict:
     plan = plan_actions(prompt)
     current = prompt
     if plan["optimize"]:
-        rewritten = rewrite(prompt, "optimize")
-        if rewritten.call:
+        try:
+            rewritten = rewrite(prompt, "optimize")
+        except llm.ModelUnavailable:
+            rewritten = None
+            steps.append("Prompt not compressed: no compressor or model available")
+        if rewritten and rewritten.call:
             calls.append(rewritten.call)
-        if count_tokens(rewritten.text) < original_tokens:
+        if rewritten and count_tokens(rewritten.text) < original_tokens:
             current = rewritten.text
             steps.append(f"Prompt compressed with {rewritten.backend}")
-        else:
+        elif rewritten:
             steps.append("Rewrite was not shorter; kept original prompt")
 
     analysis = analyze_prompt(current)
-    answer = llm.generate(current, choose_backend(analysis))
+    optimized_tokens = count_tokens(current)
+
+    try:
+        answer = llm.generate(current, choose_backend(analysis))
+    except llm.ModelUnavailable:
+        # Free mode with no local model: the optimized prompt is the result.
+        steps.append(
+            f"No model available to answer; recommended route is {analysis['recommended_route']}"
+        )
+        overhead = sum(c.input_tokens + c.output_tokens for c in calls)
+        log_request(
+            route="Not answered", difficulty=analysis["difficulty"],
+            original_tokens=original_tokens, optimized_tokens=optimized_tokens,
+            overhead_tokens=overhead, verification_score=None, cost=0.0,
+        )
+        return _response(
+            prompt, current, plan["reason"], steps,
+            route="Not answered", model="-", confidence=None, cost=0.0,
+            verification=None, response=None, risk=risk, analysis=analysis,
+            tokens=_tokens(original_tokens, optimized_tokens, overhead),
+        )
+
     steps.append(f"Answered by {answer.model} ({answer.backend})")
     answer_calls = [answer]
 
     verification = None
     confidence = 100 if answer.backend == llm.REMOTE else 70
-    if answer.backend == llm.LOCAL:
+    if answer.backend == llm.LOCAL and llm.remote_available():
         verification, judge = verify_response(current, answer.text)
         calls.append(judge)
         confidence = round(verification["score"] * 10)
@@ -82,8 +107,9 @@ def run_agent(prompt: str) -> dict:
             answer_calls.append(answer)
             confidence = 100
             steps.append("Escalated to Gemini after low verifier score")
+    elif answer.backend == llm.LOCAL:
+        steps.append("Answer not verified: the judge needs AI mode")
 
-    optimized_tokens = count_tokens(current)
     overhead = sum(c.input_tokens + c.output_tokens for c in calls)
     cost = sum(call_cost(c) for c in calls + answer_calls)
 
@@ -117,6 +143,7 @@ def _tokens(original: int, optimized: int, overhead: int) -> dict:
 def _response(original, processed, reason, steps, *, route, model, confidence, cost,
               verification, response, risk, analysis, tokens) -> dict:
     return {
+        "mode": "ai" if llm.remote_available() else "free",
         "original_prompt": original,
         "processed_prompt": processed,
         "planner_reason": reason,
