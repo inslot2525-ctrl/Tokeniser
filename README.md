@@ -28,11 +28,11 @@ prompt ─► risk check ─► planner ─► rewrite (optional) ─► classif
 | Router | Easy/Medium → local model, Hard → Gemini. `MODEL_PROVIDER` can pin either one. If Ollama is down it falls back to Gemini and reports the route that *actually* answered. | 1 |
 | Verifier | Only for local answers: a Gemini judge scores 0–10, and anything under the threshold is re-answered on Gemini. | 0–2 |
 
-A full `/agent` request makes **1 to 4** LLM calls (the first version made up to 8).
+A full `/agent` request makes **1 to 4** LLM calls.
 
-### Honest accounting
+### Net savings, not just gross
 
-Every `/agent` response includes token accounting for the pipeline itself (illustrative values):
+Every `/agent` response counts the tokens the pipeline itself spent (values below are illustrative):
 
 ```json
 "tokens": {
@@ -62,10 +62,23 @@ The dashboard reports both gross and net savings for the same reason.
 
 ```bash
 cd backend
-python -m eval.run_eval --quality --out eval/results.md
+python -m eval.run_eval                                  # token metrics only
+python -m eval.run_eval --quality --out eval/results.md  # + answer-quality comparison
 ```
 
-> **Results:** run the command above with your API key and paste the summary here. Don't quote numbers that weren't measured.
+It needs `GEMINI_API_KEY` set. The summary and a per-prompt table are written to `eval/results.md`. Results depend on the model and prompt set, so this README doesn't quote fixed savings figures; run the eval to get numbers for your setup.
+
+---
+
+## Frontend
+
+A React dashboard over the API:
+
+- **Dashboard** (`/`): runs `/agent`. Shows a prompt editor with live token count, the pipeline and execution steps for each run, the response with route, verifier score and cost, token analytics, and run history.
+- **Optimizer** (`/optimizer`): rewrites a prompt on its own and shows a word-level before/after diff, a token heatmap, a per-model cost calculator, a context-budget planner and a conversation-length simulator.
+- **Settings** (`/settings`): backend URL, connection test, live stats from `/dashboard`, and the endpoint reference.
+
+**Stack:** React 19, TypeScript, Vite, Tailwind CSS v4, React Router, Axios, Recharts, Framer Motion. The backend uses FastAPI, Pydantic, tiktoken, the Google GenAI SDK and SQLite.
 
 ---
 
@@ -124,22 +137,29 @@ extension/               Chrome extension popup (MV3)
 
 Prerequisites: Python 3.11+, Node 20+, a [Gemini API key](https://aistudio.google.com), and optionally [Ollama](https://ollama.com) for the local route.
 
-```bash
-# Local model (optional; without it everything routes to Gemini)
-ollama pull gemma3:4b
+**1. Local model (optional).** Without it, everything routes to Gemini.
 
-# Backend
+```bash
+ollama pull gemma3:4b
+```
+
+**2. Backend**, from the repo root:
+
+```bash
 cd backend
 python -m venv .venv
-.venv\Scripts\activate            # Windows  (source .venv/bin/activate on macOS/Linux)
+.venv\Scripts\activate            # Windows; on macOS/Linux: source .venv/bin/activate
 pip install -r requirements-dev.txt
 cp .env.example .env              # then set GEMINI_API_KEY
+pytest                            # tests run offline; no API key needed
 uvicorn app.main:app --reload     # http://127.0.0.1:8000
-pytest                            # run tests
+```
 
-# Frontend
+**3. Frontend**, in a second terminal from the repo root:
+
+```bash
 cd frontend
-cp .env.example .env
+cp .env.example .env              # VITE_API_URL points at the backend
 npm ci
 npm run dev                       # http://localhost:5173
 ```
