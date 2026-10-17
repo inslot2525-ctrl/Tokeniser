@@ -12,7 +12,7 @@ Works without an API key. Add your own Gemini key when you want more.
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-[Modes](#two-modes) · [How it works](#how-it-works) · [Quick start](#quick-start) · [API](#api) · [Evaluation](#evaluation) · [Limitations](#limitations)
+[Modes](#two-modes) · [How it works](#how-it-works) · [Quick start](#quick-start) · [API](#api) · [Evaluation](#evaluation) · [Limitations](#limitations) · [Interview guide](docs/INTERVIEW.md)
 
 <img src="docs/hero.png" alt="TokenWise landing page" width="100%">
 
@@ -85,7 +85,7 @@ The first version optimized prompts by asking an LLM to rewrite them. That rewri
 "tokens": { "original": 96, "optimized": 41, "saved": 55, "pipeline_overhead": 228, "net_saved": -173 }
 ```
 
-Local compression fixes this. `pipeline_overhead` for compression is 0, so every saved token is a net saving. The LLM rewrite is still available with `COMPRESSOR=llm`, for comparison.
+Local compression fixes this. `pipeline_overhead` for compression is 0, so every saved token is a net saving, and the LLM rewrite was removed.
 
 ## Quick start
 
@@ -149,9 +149,8 @@ Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** a
 | Endpoint | What it does |
 |---|---|
 | `POST /agent` | Full pipeline: risk check → compress → route → answer → checks |
-| `POST /smart-optimize` · `/optimize` · `/compress` | Local compression, with token metrics and the phrases removed |
+| `POST /compress` | Local compression only, with token metrics and the phrases removed (never calls a model) |
 | `POST /enhance` | Grammar and clarity (needs a model: Ollama or AI mode) |
-| `POST /route` | Classify, route and answer |
 | `POST /tokenize` | Token count |
 | `POST /detect-risk` | Jailbreak / injection / exfiltration check |
 | `GET /dashboard` | Request count, gross and net savings, route mix, cost |
@@ -174,23 +173,22 @@ A real response from the backend with no key and no Ollama:
   "mode": "free",
   "original_prompt": "Hi there! I hope you're doing well. Could you please list exactly four advantages of using Docker containers for deployment? Please don't mention Kubernetes. Thanks so much!",
   "processed_prompt": "List exactly four advantages of using Docker containers for deployment. Don't mention Kubernetes.",
-  "planner_reason": "Prompt is 32 tokens; compressing locally with rules (no API cost).",
   "steps": [
     "Prompt compressed with Rules (removed asking, greeting, pleasantry, politeness, thanks)",
     "No model available to answer; recommended route is Local"
   ],
   "route": "Not answered",
   "model": "-",
-  "confidence": null,
-  "estimated_remote_cost": "$0.000000",
-  "verification": null,
-  "checks": null,
   "response": null,
   "risk": { "risk": "LOW", "attack_type": "None", "confidence": 5, "matched_patterns": [] },
   "analysis": {
     "category": "General", "difficulty": "Easy", "reasoning": "Low", "recommended_route": "Local",
     "signals": ["short, simple request"], "estimated_input_tokens": 15, "estimated_output_tokens": 150
   },
+  "checks": null,
+  "verification": null,
+  "judge_score": null,
+  "estimated_remote_cost": "$0.000000",
   "tokens": { "original": 32, "optimized": 15, "saved": 17, "pipeline_overhead": 0, "net_saved": 17 }
 }
 ```
@@ -246,7 +244,7 @@ All settings are environment variables; see [`backend/.env.example`](backend/.en
 | `GEMINI_MODEL` | `gemini-2.5-flash` | Remote model |
 | `MODEL_PROVIDER` | `auto` | `auto` (router decides), `gemini` or `ollama` |
 | `OLLAMA_URL` · `OLLAMA_MODEL` | `localhost:11434` · `gemma3:4b` | Local model |
-| `COMPRESSOR` | `auto` | `auto` (rules + LLMLingua-2 if installed), `rules`, or `llm` (paid rewrite) |
+| `COMPRESSOR` | `auto` | `auto` (rules + LLMLingua-2 if installed) or `rules` |
 | `COMPRESSION_RATE` | `0.6` | Fraction of tokens LLMLingua-2 keeps |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed origins |
 | `API_KEY` | *(off)* | Require `X-API-Key` on model endpoints |
@@ -274,7 +272,7 @@ backend/
       llm.py              Gemini / Ollama clients, per-request key scope
       rule_compressor.py  Rule-based filler removal
       compressor.py       LLMLingua-2 compression
-      optimizer.py        Compression chain (rules -> LLMLingua-2), or LLM rewrite
+      optimizer.py        Compression chain (rules -> LLMLingua-2) + enhance
       answer_checks.py    Rule-based answer checks
       complexity.py       Rule-based difficulty classifier
       router.py           Backend choice + cost
