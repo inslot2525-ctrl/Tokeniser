@@ -12,10 +12,10 @@ import { useAgentContext } from "../../context/AgentContext";
 
 const STAGES = [
   { title: "Risk check", desc: "Jailbreak & injection scan",   icon: Brain },
-  { title: "Planner",   desc: "Decide if a rewrite pays off", icon: Sparkles },
-  { title: "Rewrite",   desc: "One-pass prompt optimization", icon: Minimize2 },
+  { title: "Planner",   desc: "Choose compression steps",     icon: Sparkles },
+  { title: "Compress",  desc: "Rules + LLMLingua-2, no API",  icon: Minimize2 },
   { title: "Router",    desc: "Pick local or remote model",   icon: Route },
-  { title: "Verifier",  desc: "Validate & score response",    icon: ShieldCheck },
+  { title: "Checks",    desc: "Rule checks + judge (AI mode)", icon: ShieldCheck },
 ];
 
 export default function Pipeline() {

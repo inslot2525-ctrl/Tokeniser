@@ -41,7 +41,12 @@ export default function ExecutionTimeline() {
 
         {
             title: "Verification",
-            subtitle: `${result.confidence}% confidence`,
+            subtitle: [
+                result.checks
+                    ? result.checks.passed ? "Rule checks passed" : `Rule checks: ${result.checks.issues.join("; ")}`
+                    : "No answer to check",
+                result.confidence !== null ? `judge ${result.confidence}%` : null,
+            ].filter(Boolean).join(" • "),
             icon: <ShieldCheck size={18}/>,
             color: "bg-purple-500",
         }

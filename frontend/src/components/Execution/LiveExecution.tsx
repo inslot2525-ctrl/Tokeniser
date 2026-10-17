@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, LoaderCircle, Circle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, LoaderCircle, Circle } from "lucide-react";
 import { useAgentContext } from "../../context/AgentContext";
+import { isWarningStep } from "../../utils/steps";
 
 // Shown while a request is in flight. Once the response arrives, the list is
 // replaced by the steps the backend actually ran.
-const PENDING_STEPS = ["Risk check", "Planner", "Rewrite", "Router", "Verifier"];
+const PENDING_STEPS = ["Risk check", "Planner", "Compress", "Router", "Answer checks"];
 
-type StepStatus = "waiting" | "running" | "completed";
+type StepStatus = "waiting" | "running" | "completed" | "warning";
 
 export default function LiveExecution() {
   const { isLoading, result, runId } = useAgentContext();
@@ -33,8 +34,8 @@ export default function LiveExecution() {
     ? progress.index
     : -1;
 
-  function getStatus(index: number): StepStatus {
-    if (index < current) return "completed";
+  function getStatus(index: number, step: string): StepStatus {
+    if (index < current) return result && isWarningStep(step) ? "warning" : "completed";
     if (index === current) return "running";
     return "waiting";
   }
@@ -45,51 +46,21 @@ export default function LiveExecution() {
 
       <div className="space-y-3">
         {STEPS.map((step, index) => {
-          const status = getStatus(index);
+          const status = getStatus(index, step);
+          const s = STYLES[status];
 
           return (
             <div
               key={step}
-              className={`flex items-center justify-between rounded-xl border px-5 py-4 transition-all duration-300 ${
-                status === "completed"
-                  ? "border-green-500/30 bg-green-500/5"
-                  : status === "running"
-                  ? "border-orange-500/50 bg-orange-500/10"
-                  : "border-white/5 bg-[#181818]"
-              }`}
+              className={`flex items-center justify-between gap-4 rounded-xl border px-5 py-4 transition-all duration-300 ${s.row}`}
             >
               <div className="flex items-center gap-4">
-                {status === "completed" ? (
-                  <CheckCircle2 size={18} className="text-green-500" />
-                ) : status === "running" ? (
-                  <LoaderCircle size={18} className="animate-spin text-orange-500" />
-                ) : (
-                  <Circle size={18} className="text-gray-700" />
-                )}
-
-                <span
-                  className={`font-medium ${
-                    status === "completed"
-                      ? "text-green-400"
-                      : status === "running"
-                      ? "text-orange-400"
-                      : "text-gray-500"
-                  }`}
-                >
-                  {step}
-                </span>
+                <s.Icon size={18} className={`shrink-0 ${s.icon}`} />
+                <span className={`font-medium ${s.text}`}>{step}</span>
               </div>
 
-              <span
-                className={`text-xs font-semibold uppercase tracking-widest ${
-                  status === "completed"
-                    ? "text-green-500"
-                    : status === "running"
-                    ? "text-orange-500"
-                    : "text-gray-700"
-                }`}
-              >
-                {status}
+              <span className={`shrink-0 text-xs font-semibold uppercase tracking-widest ${s.label}`}>
+                {status === "warning" ? "note" : status}
               </span>
             </div>
           );
@@ -98,3 +69,10 @@ export default function LiveExecution() {
     </div>
   );
 }
+
+const STYLES: Record<StepStatus, { row: string; text: string; label: string; icon: string; Icon: typeof Circle }> = {
+  completed: { row: "border-green-500/30 bg-green-500/5", text: "text-green-400", label: "text-green-500", icon: "text-green-500", Icon: CheckCircle2 },
+  warning: { row: "border-amber-500/30 bg-amber-500/5", text: "text-amber-300", label: "text-amber-400", icon: "text-amber-400", Icon: AlertTriangle },
+  running: { row: "border-orange-500/50 bg-orange-500/10", text: "text-orange-400", label: "text-orange-500", icon: "animate-spin text-orange-500", Icon: LoaderCircle },
+  waiting: { row: "border-white/5 bg-[#181818]", text: "text-gray-500", label: "text-gray-700", icon: "text-gray-700", Icon: Circle },
+};

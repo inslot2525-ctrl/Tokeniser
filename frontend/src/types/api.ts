@@ -1,8 +1,12 @@
 // Mirrors the FastAPI responses in backend/app/api/routes.py.
 
 // ─── Request ────────────────────────────────────────────────────────────────
+/** free: rules + local models only. ai: may call Gemini with the user's key. */
+export type Mode = "free" | "ai";
+
 export interface PromptRequest {
   prompt: string;
+  mode?: Mode;
 }
 
 // ─── /detect-risk response ───────────────────────────────────────────────────
@@ -24,22 +28,33 @@ export interface TokenAccounting {
   net_saved: number;
 }
 
+export interface AnswerChecks {
+  passed: boolean;
+  issues: string[];
+}
+
 export interface AgentResponse {
+  mode: Mode;
   original_prompt: string;
   processed_prompt: string;
   planner_reason: string;
   steps: string[];
+  /** "Local" | "Gemini" | "Blocked" | "Not answered" */
   route: string;
   model: string;
-  confidence: number;
+  /** Judge score x10; null unless the Gemini judge scored the answer. */
+  confidence: number | null;
   estimated_remote_cost: string;
-  response: string;
+  /** null when no model was available to answer (free mode without Ollama). */
+  response: string | null;
   verification: { score: number; reason: string } | null;
+  checks: AnswerChecks | null;
   risk: RiskResponse;
   analysis: {
     category: string;
     difficulty: string;
     reasoning: string;
+    recommended_route: "Local" | "Gemini";
     signals: string[];
   } | null;
   tokens: TokenAccounting;
@@ -55,6 +70,7 @@ export interface OptimizeResponse {
   savings_percent: number;
   overhead_tokens: number;
   backend: string;
+  removed_phrases: { label: string; text: string }[];
 }
 
 export interface EnhanceResponse extends OptimizeResponse {
