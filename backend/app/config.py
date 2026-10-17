@@ -43,9 +43,10 @@ REMOTE_OUTPUT_PRICE_PER_M = _float("REMOTE_OUTPUT_PRICE_PER_M", 2.50)
 # A local answer scoring below this is escalated to the remote model.
 VERIFY_THRESHOLD = _float("VERIFY_THRESHOLD", 8.0)
 
-# auto  = LLMLingua-2 if installed, else LLM rewrite
-# llm   = always use the LLM rewrite
-# lingua = prefer LLMLingua-2 (same as auto; falls back if not installed)
+# auto   = rule-based filler removal, then LLMLingua-2 if installed (default)
+# rules  = rule-based filler removal only
+# llm    = one LLM rewrite call (costs API tokens; the original behaviour)
+# lingua = alias for auto
 COMPRESSOR = os.getenv("COMPRESSOR", "auto").lower()
 LINGUA_MODEL = os.getenv(
     "LINGUA_MODEL", "microsoft/llmlingua-2-bert-base-multilingual-cased-meetingbank"

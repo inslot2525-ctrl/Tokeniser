@@ -1,7 +1,7 @@
 """The /agent pipeline.
 
-    risk check -> plan -> (one rewrite) -> classify + route -> answer
-               -> (verify local answers, escalate to Gemini if weak)
+    risk check -> compress (rules, + LLMLingua-2) -> classify + route -> answer
+               -> rule checks -> (AI mode: judge local answers, escalate if weak)
 
 Every LLM call the pipeline makes is counted, so the response reports net
 token savings (prompt tokens saved minus the pipeline's own overhead), not
@@ -13,6 +13,7 @@ import logging
 from app import config
 from app.analytics.metrics import log_request
 from app.engine import llm
+from app.engine.answer_checks import check_answer
 from app.engine.complexity import analyze_prompt
 from app.engine.jailbreak_detector import detect_prompt_risk
 from app.engine.optimizer import rewrite
@@ -44,7 +45,7 @@ def run_agent(prompt: str) -> dict:
             prompt, prompt, "Blocked by risk detector.", ["Blocked by risk detector"],
             route="Blocked", model="-", confidence=risk["confidence"], cost=0.0,
             verification=None, response=BLOCKED_MESSAGE, risk=risk, analysis=None,
-            tokens=_tokens(original_tokens, original_tokens, 0),
+            tokens=_tokens(original_tokens, original_tokens, 0), checks=None,
         )
 
     steps = []
@@ -64,7 +65,9 @@ def run_agent(prompt: str) -> dict:
             calls.append(rewritten.call)
         if rewritten and count_tokens(rewritten.text) < original_tokens:
             current = rewritten.text
-            steps.append(f"Prompt compressed with {rewritten.backend}")
+            labels = sorted({r["label"] for r in rewritten.removed})
+            removed = f" (removed {', '.join(labels)})" if labels else ""
+            steps.append(f"Prompt compressed with {rewritten.backend}{removed}")
         elif rewritten:
             steps.append("Rewrite was not shorter; kept original prompt")
 
@@ -88,27 +91,44 @@ def run_agent(prompt: str) -> dict:
             prompt, current, plan["reason"], steps,
             route="Not answered", model="-", confidence=None, cost=0.0,
             verification=None, response=None, risk=risk, analysis=analysis,
-            tokens=_tokens(original_tokens, optimized_tokens, overhead),
+            tokens=_tokens(original_tokens, optimized_tokens, overhead), checks=None,
         )
 
     steps.append(f"Answered by {answer.model} ({answer.backend})")
     answer_calls = [answer]
 
+    # Free rule checks first, against the original prompt so no constraint is
+    # lost to compression. Confidence is only reported when a judge scored it.
+    checks = check_answer(prompt, answer.text)
     verification = None
-    confidence = 100 if answer.backend == llm.REMOTE else 70
-    if answer.backend == llm.LOCAL and llm.remote_available():
-        verification, judge = verify_response(current, answer.text)
-        calls.append(judge)
-        confidence = round(verification["score"] * 10)
-        steps.append(f"Verifier scored local answer {verification['score']}/10")
+    confidence = None
 
-        if verification["score"] < config.VERIFY_THRESHOLD:
+    if answer.backend == llm.LOCAL and llm.remote_available():
+        if not checks["passed"]:
+            steps.append(f"Rule checks failed: {'; '.join(checks['issues'])}")
             answer = llm.gemini_generate(current)
             answer_calls.append(answer)
-            confidence = 100
-            steps.append("Escalated to Gemini after low verifier score")
+            steps.append("Escalated to Gemini without a judge call")
+            checks = check_answer(prompt, answer.text)
+        else:
+            verification, judge = verify_response(current, answer.text)
+            calls.append(judge)
+            confidence = round(verification["score"] * 10)
+            steps.append(f"Verifier scored local answer {verification['score']}/10")
+
+            if verification["score"] < config.VERIFY_THRESHOLD:
+                answer = llm.gemini_generate(current)
+                answer_calls.append(answer)
+                confidence = None
+                steps.append("Escalated to Gemini after low verifier score")
+                checks = check_answer(prompt, answer.text)
     elif answer.backend == llm.LOCAL:
-        steps.append("Answer not verified: the judge needs AI mode")
+        steps.append("Answer not judged: the LLM judge needs AI mode")
+
+    if checks["passed"]:
+        steps.append("Rule checks passed")
+    elif answer.backend == llm.REMOTE or not llm.remote_available():
+        steps.append(f"Rule checks flagged: {'; '.join(checks['issues'])}")
 
     overhead = sum(c.input_tokens + c.output_tokens for c in calls)
     cost = sum(call_cost(c) for c in calls + answer_calls)
@@ -125,7 +145,7 @@ def run_agent(prompt: str) -> dict:
         prompt, current, plan["reason"], steps,
         route=answer.backend, model=answer.model, confidence=confidence, cost=cost,
         verification=verification, response=answer.text, risk=risk, analysis=analysis,
-        tokens=_tokens(original_tokens, optimized_tokens, overhead),
+        tokens=_tokens(original_tokens, optimized_tokens, overhead), checks=checks,
     )
 
 
@@ -141,7 +161,7 @@ def _tokens(original: int, optimized: int, overhead: int) -> dict:
 
 
 def _response(original, processed, reason, steps, *, route, model, confidence, cost,
-              verification, response, risk, analysis, tokens) -> dict:
+              verification, response, risk, analysis, tokens, checks) -> dict:
     return {
         "mode": "ai" if llm.remote_available() else "free",
         "original_prompt": original,
@@ -153,6 +173,7 @@ def _response(original, processed, reason, steps, *, route, model, confidence, c
         "confidence": confidence,
         "estimated_remote_cost": format_cost(cost),
         "verification": verification,
+        "checks": checks,
         "response": response,
         "risk": risk,
         "analysis": analysis,

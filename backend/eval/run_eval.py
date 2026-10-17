@@ -8,7 +8,8 @@ For each prompt in prompts.jsonl:
      to check the rewrite didn't lose meaning.
 
 Usage (from backend/):
-    python -m eval.run_eval --compressor lingua   # local LLMLingua-2; no API key needed
+    python -m eval.run_eval --compressor rules    # rule-based filler removal; no API key needed
+    python -m eval.run_eval --compressor lingua   # rules + local LLMLingua-2; no API key needed
     python -m eval.run_eval --compressor llm      # LLM rewrite; needs GEMINI_API_KEY or Ollama
     python -m eval.run_eval --quality             # + answer-quality comparison (needs GEMINI_API_KEY)
     python -m eval.run_eval --out eval/results.md
@@ -68,8 +69,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path, help="write a markdown report here")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
-        "--compressor", choices=["auto", "llm", "lingua"], default=None,
-        help="override COMPRESSOR (llm = LLM rewrite, lingua = local LLMLingua-2)",
+        "--compressor", choices=["auto", "rules", "lingua", "llm"], default=None,
+        help="override COMPRESSOR: rules, lingua (rules + LLMLingua-2), llm (LLM rewrite)",
     )
     args = parser.parse_args()
 
@@ -77,7 +78,12 @@ def main() -> None:
         config.COMPRESSOR = args.compressor
     if config.COMPRESSOR == "lingua" and not compressor.enabled():
         raise SystemExit("llmlingua is not installed: pip install -r requirements-lingua.txt")
-    method = compressor.NAME if compressor.enabled() else "LLM rewrite"
+    if config.COMPRESSOR == "llm":
+        method = "LLM rewrite"
+    elif compressor.enabled():
+        method = f"Rules + {compressor.NAME}"
+    else:
+        method = "Rules"
     compressor.warm_up()  # keep model loading out of the latency numbers
 
     rng = random.Random(args.seed)
