@@ -1,7 +1,7 @@
 import axios from "axios";
 import type {
   AgentResponse,
-  OptimizeResponse,
+  CompressResponse,
   TokenResponse,
   EnhanceResponse,
   DashboardStats,
@@ -39,11 +39,9 @@ function post<T>(path: string, prompt: string, opts: ModelOptions, signal?: Abor
 export const runAgent = (prompt: string, opts: ModelOptions = FREE, signal?: AbortSignal) =>
   post<AgentResponse>("/agent", prompt, opts, signal);
 
-export const optimizePrompt = (prompt: string, opts: ModelOptions = FREE) =>
-  post<OptimizeResponse>("/optimize", prompt, opts);
-
-export const smartOptimize = (prompt: string, opts: ModelOptions = FREE) =>
-  post<OptimizeResponse>("/smart-optimize", prompt, opts);
+// Compression is local and never calls a model, so it needs no mode or key.
+export const compressPrompt = (prompt: string) =>
+  post<CompressResponse>("/compress", prompt, FREE);
 
 export const enhancePrompt = (prompt: string, opts: ModelOptions = FREE) =>
   post<EnhanceResponse>("/enhance", prompt, opts);

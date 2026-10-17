@@ -10,12 +10,13 @@ import {
 import { useEffect, useState } from "react";
 import { useAgentContext } from "../../context/AgentContext";
 
+// The five steps of backend/app/engine/agent.py.
 const STAGES = [
-  { title: "Risk check", desc: "Jailbreak & injection scan",   icon: Brain },
-  { title: "Planner",   desc: "Choose compression steps",     icon: Sparkles },
-  { title: "Compress",  desc: "Rules + LLMLingua-2, no API",  icon: Minimize2 },
-  { title: "Router",    desc: "Pick local or remote model",   icon: Route },
-  { title: "Checks",    desc: "Rule checks + judge (AI mode)", icon: ShieldCheck },
+  { title: "Risk check", desc: "Block jailbreak prompts",       icon: Brain },
+  { title: "Compress",   desc: "Rules + LLMLingua-2, no API",   icon: Minimize2 },
+  { title: "Route",      desc: "Easy: local, hard: Gemini",     icon: Route },
+  { title: "Answer",     desc: "Or return the compressed prompt", icon: Sparkles },
+  { title: "Check",      desc: "Rule checks + judge (AI mode)", icon: ShieldCheck },
 ];
 
 export default function Pipeline() {

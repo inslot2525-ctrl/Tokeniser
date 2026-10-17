@@ -51,7 +51,7 @@ export default function Workspace() {
         optimizedPrompt: response.processed_prompt,
         savedTokens: tokens.saved,
         savingsPercent: tokens.original ? Math.round((tokens.saved / tokens.original) * 100) : 0,
-        confidence: response.confidence ?? undefined,
+        confidence: response.judge_score ?? undefined,
       });
       toast.success(
         response.response === null ? "Prompt optimized (no model ran)" : "Agent completed"

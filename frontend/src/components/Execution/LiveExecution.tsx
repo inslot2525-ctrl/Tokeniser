@@ -5,7 +5,7 @@ import { isWarningStep } from "../../utils/steps";
 
 // Shown while a request is in flight. Once the response arrives, the list is
 // replaced by the steps the backend actually ran.
-const PENDING_STEPS = ["Risk check", "Planner", "Compress", "Router", "Answer checks"];
+const PENDING_STEPS = ["Risk check", "Compress", "Route", "Answer", "Check"];
 
 type StepStatus = "waiting" | "running" | "completed" | "warning";
 

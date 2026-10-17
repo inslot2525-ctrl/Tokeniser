@@ -6,8 +6,8 @@ tokens, so the savings are net savings. It does not fix grammar or rephrase,
 so /enhance still uses the LLM.
 
 llmlingua (and PyTorch) is an optional dependency: install
-requirements-lingua.txt to enable it. Without it, or with COMPRESSOR=llm,
-the optimizer falls back to the single-call LLM rewrite.
+requirements-lingua.txt to enable it. Without it, or with COMPRESSOR=rules,
+compression uses the rule-based compressor alone.
 """
 
 import importlib.util
@@ -59,7 +59,7 @@ _lock = threading.Lock()
 
 
 def enabled() -> bool:
-    if config.COMPRESSOR in ("llm", "rules"):
+    if config.COMPRESSOR == "rules":
         return False
     return importlib.util.find_spec("llmlingua") is not None
 

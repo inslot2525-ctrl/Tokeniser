@@ -33,8 +33,8 @@ class FakeLLM:
 def isolated(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "METRICS_DB_PATH", str(tmp_path / "metrics.db"))
     monkeypatch.setattr(config, "MODEL_PROVIDER", "auto")
-    # Tests use the LLM rewrite path unless they opt into the compressor.
-    monkeypatch.setattr(config, "COMPRESSOR", "llm")
+    # Rules only, so tests never load LLMLingua-2 unless they opt in.
+    monkeypatch.setattr(config, "COMPRESSOR", "rules")
     monkeypatch.setattr(config, "API_KEY", "")
     # No server-side Gemini key: AI mode must get one from the request.
     monkeypatch.setattr(config, "GEMINI_API_KEY", "")

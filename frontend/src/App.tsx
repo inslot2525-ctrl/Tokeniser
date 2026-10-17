@@ -5,7 +5,6 @@ import AppProvider from "./context/AppProvider";
 import DashboardLayout from "./components/Layout/DashboardLayout";
 
 import Dashboard from "./pages/Dashboard";
-import LoginPage from "./pages/LoginPage";
 import OptimizerPage from "./pages/OptimizerPage";
 import Settings from "./pages/Settings";
 
@@ -24,10 +23,6 @@ export default function App() {
           }}
         />
         <Routes>
-          {/* Login — no layout wrapper */}
-          <Route path="/login" element={<LoginPage onLogin={() => {}} />} />
-
-          {/* All other routes inside the dashboard layout */}
           <Route
             path="/"
             element={

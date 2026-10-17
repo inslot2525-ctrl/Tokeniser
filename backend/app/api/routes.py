@@ -8,15 +8,13 @@ from app.api.security import rate_limit, require_api_key
 from app.engine import llm
 from app.engine.agent import run_agent
 from app.engine.jailbreak_detector import detect_prompt_risk
-from app.engine.optimizer import rewrite_with_metrics
-from app.engine.router import route_prompt
+from app.engine.optimizer import compress_with_metrics, enhance
 from app.engine.tokenizer import count_tokens
-from app.models.schemas import OptimizationResponse, PromptRequest, TokenResponse
+from app.models.schemas import CompressResponse, PromptRequest, TokenResponse
 
 router = APIRouter()
 
-# Endpoints that can call a model are rate limited; the cheap local ones are not.
-llm_guard = [Depends(require_api_key), Depends(rate_limit)]
+guard = [Depends(require_api_key), Depends(rate_limit)]
 
 
 def gemini_key(x_gemini_key: str | None = Header(default=None, max_length=200)) -> str | None:
@@ -27,6 +25,7 @@ def gemini_key(x_gemini_key: str | None = Header(default=None, max_length=200)) 
 
 @contextmanager
 def model_session(payload: PromptRequest, user_key: str | None):
+    """Free mode: never call Gemini. AI mode: call it with the user's key."""
     if payload.mode == "free":
         with llm.session(api_key=None, allow_remote=False):
             yield
@@ -43,14 +42,29 @@ def model_session(payload: PromptRequest, user_key: str | None):
             yield
 
 
-@router.get("/")
-def home():
-    return {"message": "Tokeniser API running"}
-
-
 @router.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@router.post("/agent", dependencies=guard)
+def agent(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    """The full pipeline: risk check, compress, route, answer, check."""
+    with model_session(payload, key):
+        return run_agent(payload.prompt)
+
+
+@router.post("/compress", response_model=CompressResponse, dependencies=guard)
+def compress(payload: PromptRequest):
+    """Local compression only. Never calls a model, so mode doesn't matter."""
+    return compress_with_metrics(payload.prompt)
+
+
+@router.post("/enhance", dependencies=guard)
+def enhance_prompt(payload: PromptRequest, key: str | None = Depends(gemini_key)):
+    """Grammar and clarity fixes. Needs a model (Ollama, or AI mode)."""
+    with model_session(payload, key):
+        return enhance(payload.prompt)
 
 
 @router.post("/tokenize", response_model=TokenResponse)
@@ -61,44 +75,6 @@ def tokenize(payload: PromptRequest):
 @router.post("/detect-risk")
 def detect_risk(payload: PromptRequest):
     return detect_prompt_risk(payload.prompt)
-
-
-@router.post("/optimize", response_model=OptimizationResponse, dependencies=llm_guard)
-def optimize(payload: PromptRequest, key: str | None = Depends(gemini_key)):
-    with model_session(payload, key):
-        return rewrite_with_metrics(payload.prompt, "compress")
-
-
-@router.post("/smart-optimize", response_model=OptimizationResponse, dependencies=llm_guard)
-def smart_optimize(payload: PromptRequest, key: str | None = Depends(gemini_key)):
-    with model_session(payload, key):
-        return rewrite_with_metrics(payload.prompt, "optimize")
-
-
-@router.post("/compress", dependencies=llm_guard)
-def compress(payload: PromptRequest, key: str | None = Depends(gemini_key)):
-    with model_session(payload, key):
-        result = rewrite_with_metrics(payload.prompt, "compress")
-    return {"compressed": result["optimized"], **result}
-
-
-@router.post("/enhance", dependencies=llm_guard)
-def enhance(payload: PromptRequest, key: str | None = Depends(gemini_key)):
-    with model_session(payload, key):
-        result = rewrite_with_metrics(payload.prompt, "enhance")
-    return {"enhanced": result["optimized"], **result}
-
-
-@router.post("/route", dependencies=llm_guard)
-def route(payload: PromptRequest, key: str | None = Depends(gemini_key)):
-    with model_session(payload, key):
-        return route_prompt(payload.prompt)
-
-
-@router.post("/agent", dependencies=llm_guard)
-def agent(payload: PromptRequest, key: str | None = Depends(gemini_key)):
-    with model_session(payload, key):
-        return run_agent(payload.prompt)
 
 
 @router.get("/dashboard")

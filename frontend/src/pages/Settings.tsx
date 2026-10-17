@@ -192,14 +192,12 @@ export default function Settings() {
         </p>
         <div className="mt-4 space-y-2">
           {[
-            { method: "POST", path: "/agent",          desc: "Full pipeline" },
-            { method: "POST", path: "/smart-optimize", desc: "Local compression + metrics" },
-            { method: "POST", path: "/optimize",       desc: "Local compression + metrics" },
-            { method: "POST", path: "/enhance",        desc: "Grammar & clarity (needs a model)" },
-            { method: "POST", path: "/tokenize",       desc: "Count tokens in a prompt" },
-            { method: "POST", path: "/detect-risk",    desc: "Jailbreak detection" },
-            { method: "POST", path: "/route",          desc: "Classify, route and answer" },
-            { method: "GET",  path: "/dashboard",      desc: "Analytics dashboard data" },
+            { method: "POST", path: "/agent",       desc: "Full pipeline" },
+            { method: "POST", path: "/compress",    desc: "Local compression + metrics (no model)" },
+            { method: "POST", path: "/enhance",     desc: "Grammar & clarity (needs a model)" },
+            { method: "POST", path: "/tokenize",    desc: "Count tokens in a prompt" },
+            { method: "POST", path: "/detect-risk", desc: "Jailbreak detection" },
+            { method: "GET",  path: "/dashboard",   desc: "Analytics dashboard data" },
           ].map((e) => (
             <div
               key={e.path}

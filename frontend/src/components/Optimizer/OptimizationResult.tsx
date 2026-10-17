@@ -1,27 +1,14 @@
 import { useState } from "react";
 import { Copy, CheckCircle } from "lucide-react";
 import { diffWords } from "diff";
-import type { OptimizeResponse } from "../../types/api";
+import type { CompressResponse } from "../../types/api";
 
 interface Props {
-  result: OptimizeResponse;
+  result: CompressResponse;
 }
 
 export default function OptimizationResult({ result }: Props) {
   const [copied, setCopied] = useState(false);
-
-  const score = Math.min(Math.floor(result.savings_percent * 2), 100);
-  const rank =
-    score > 90 ? "Diamond" :
-    score > 70 ? "Platinum" :
-    score > 50 ? "Gold" :
-    score > 30 ? "Silver" : "Bronze";
-
-  const rankColor =
-    rank === "Diamond" ? "text-cyan-400" :
-    rank === "Platinum" ? "text-purple-400" :
-    rank === "Gold" ? "text-yellow-400" :
-    rank === "Silver" ? "text-gray-300" : "text-orange-600";
 
   async function handleCopy() {
     await navigator.clipboard.writeText(result.optimized);
@@ -53,13 +40,9 @@ export default function OptimizationResult({ result }: Props) {
       {/* How it was compressed */}
       <div className="rounded-2xl border border-white/10 bg-[#101010] px-6 py-4 text-sm">
         <p className="text-gray-400">
-          Compressed with <span className="font-semibold text-white">{result.backend}</span>
+          Compressed with <span className="font-semibold text-white">{result.method}</span>
           {" · "}
-          <span className={result.overhead_tokens === 0 ? "text-green-400" : "text-amber-400"}>
-            {result.overhead_tokens === 0
-              ? "0 API tokens spent"
-              : `${result.overhead_tokens} API tokens spent on the rewrite`}
-          </span>
+          <span className="text-green-400">0 API tokens spent</span>
         </p>
         {result.removed_phrases?.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -74,23 +57,6 @@ export default function OptimizationResult({ result }: Props) {
             ))}
           </div>
         )}
-      </div>
-
-      {/* Score card */}
-      <div className="rounded-2xl border border-white/10 bg-[#101010] px-6 py-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-400">Efficiency Score</p>
-            <p className="mt-1 text-3xl font-bold text-white">{score}<span className="text-lg text-gray-500">/100</span></p>
-          </div>
-          <p className={`text-2xl font-black ${rankColor}`}>{rank}</p>
-        </div>
-        <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-white/10">
-          <div
-            className="h-full rounded-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-700"
-            style={{ width: `${score}%` }}
-          />
-        </div>
       </div>
 
       {/* Diff viewer */}
