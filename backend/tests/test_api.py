@@ -60,8 +60,17 @@ def test_free_mode_never_calls_gemini(client, fake_llm):
     assert body["mode"] == "free"
     assert body["route"] == "Local"
     assert body["verification"] is None
-    assert "Answer not verified: the judge needs AI mode" in body["steps"]
+    assert "Answer not judged: the LLM judge needs AI mode" in body["steps"]
+    assert body["checks"] == {"passed": True, "issues": []}
     assert [backend for backend, _ in fake_llm.calls] == [llm.LOCAL]
+
+
+def test_free_mode_reports_rule_check_failures(client, fake_llm):
+    fake_llm.local_reply = lambda p: "1. Portable.\n2. Fast.\n3. Small.\n4. Runs on Kubernetes."
+    body = post(client, "/agent", "List exactly four advantages of Docker. Don't mention Kubernetes.").json()
+    assert body["checks"]["passed"] is False
+    assert any("Kubernetes" in s for s in body["steps"])
+    assert llm.REMOTE not in [backend for backend, _ in fake_llm.calls]
 
 
 def test_free_mode_ignores_server_key(client, fake_llm, monkeypatch):
@@ -173,6 +182,18 @@ def test_agent_escalates_weak_local_answer(client, fake_llm):
     assert body["route"] == "Gemini"
     assert body["response"] == "better answer"
     assert "Escalated to Gemini after low verifier score" in body["steps"]
+
+
+def test_failed_rule_check_escalates_without_judge_call(client, fake_llm):
+    fake_llm.local_reply = lambda p: "I'm sorry, but I can't help with that request."
+    body = ai(client, "/agent", "What is DNS?").json()
+
+    assert body["route"] == "Gemini"
+    assert body["verification"] is None
+    assert "Escalated to Gemini without a judge call" in body["steps"]
+    # Local answer, then straight to Gemini: no judge call in between.
+    assert [backend for backend, _ in fake_llm.calls] == [llm.LOCAL, llm.REMOTE]
+    assert "evaluator" not in fake_llm.calls[1][1]
 
 
 def test_agent_reports_net_savings_including_overhead(client, fake_llm):

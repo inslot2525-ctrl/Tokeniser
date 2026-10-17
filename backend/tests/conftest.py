@@ -12,8 +12,9 @@ class FakeLLM:
     def __init__(self):
         self.calls = []
         self.local_up = True
-        self.local_reply = lambda prompt: "local answer"
-        self.remote_reply = lambda prompt: "remote answer"
+        # Realistic enough to pass the rule-based answer checks.
+        self.local_reply = lambda prompt: "DNS maps domain names to IP addresses."
+        self.remote_reply = lambda prompt: "DNS translates human-readable names into IP addresses."
 
     def _result(self, backend, model, prompt, text):
         self.calls.append((backend, prompt))

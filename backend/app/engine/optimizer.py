@@ -1,13 +1,14 @@
 """Prompt rewriting.
 
-compress/optimize use local LLMLingua-2 compression when it is installed and
-otherwise a single LLM rewrite call; enhance always uses the LLM.
+compress/optimize run locally: rule-based filler removal, then LLMLingua-2
+if installed. COMPRESSOR=llm switches them to a single LLM rewrite call.
+enhance (grammar fixes) always uses an LLM.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from app import config
-from app.engine import compressor, llm
+from app.engine import compressor, llm, rule_compressor
 from app.engine.tokenizer import count_tokens
 
 MODES = {
@@ -40,26 +41,47 @@ Return ONLY the rewritten prompt, with no preamble, quotes or explanation.
 </user_prompt>"""
 
 
+RULES = "Rules"
+
+
 @dataclass
 class Rewrite:
     text: str
     backend: str
     # The LLM call that produced the rewrite, or None for local compression.
     call: llm.LLMResult | None = None
+    # Filler phrases the rule compressor removed: [{"label", "text"}].
+    removed: list[dict] = field(default_factory=list)
 
     @property
     def overhead_tokens(self) -> int:
         return self.call.input_tokens + self.call.output_tokens if self.call else 0
 
 
+def local_compress(prompt: str) -> Rewrite:
+    """Rules first (removes filler safely, any length), then LLMLingua-2 on
+    what's left if it is installed. Spends no API tokens."""
+    rules = rule_compressor.compress(prompt)
+    text, methods = rules.text, [RULES]
+
+    if compressor.enabled():
+        squeezed = compressor.compress(text)
+        if count_tokens(squeezed) < count_tokens(text):
+            text = squeezed
+            methods.append(compressor.NAME)
+
+    return Rewrite(text, " + ".join(methods), removed=rules.removed)
+
+
 def rewrite(prompt: str, mode: str = "optimize") -> Rewrite:
     if mode not in MODES:
         raise ValueError(f"Unknown mode: {mode}")
 
-    # Shortening is done locally by LLMLingua-2 when available; it spends no
-    # API tokens. Grammar fixes (enhance) need a generative model.
-    if mode != "enhance" and compressor.enabled():
-        return Rewrite(compressor.compress(prompt), compressor.NAME)
+    # Shortening is done locally by default: an LLM rewrite costs more API
+    # tokens than it saves on a prompt used once. Grammar fixes (enhance)
+    # need a generative model, and COMPRESSOR=llm opts back into the rewrite.
+    if mode != "enhance" and config.COMPRESSOR != "llm":
+        return local_compress(prompt)
 
     request = TEMPLATE.format(instruction=MODES[mode], prompt=prompt)
 
@@ -96,4 +118,5 @@ def rewrite_with_metrics(prompt: str, mode: str = "optimize") -> dict:
         # API tokens the rewrite itself consumed; 0 for local compression.
         "overhead_tokens": result.overhead_tokens,
         "backend": result.backend,
+        "removed_phrases": result.removed,
     }

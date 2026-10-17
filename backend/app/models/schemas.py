@@ -34,3 +34,4 @@ class OptimizationResponse(BaseModel):
     savings_percent: float
     overhead_tokens: int
     backend: str
+    removed_phrases: list[dict] = []

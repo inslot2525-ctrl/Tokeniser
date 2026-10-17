@@ -23,14 +23,18 @@ log = logging.getLogger(__name__)
 
 NAME = "LLMLingua-2"
 
-# Code is never compressed: dropping tokens from it breaks it.
-CODE_BLOCK = re.compile(r"```.*?```", re.S)
+# Code is never compressed: dropping tokens from it breaks it. Fenced blocks
+# and inline `spans` are passed through untouched...
+CODE_BLOCK = re.compile(r"```.*?```|`[^`\n]+`", re.S)
+# ...and a prompt with unfenced code-like syntax is not compressed at all,
+# because there is no reliable way to tell where the code starts and stops.
+UNFENCED_CODE = re.compile(r"[{};]\s*\S.*[{};]|[=!<>]=|\+\+|--\s*[;)]|=>|\)\s*\{|\bfunction\s*\w*\s*\(|\bdef \w+\(")
 
 # Tokens the model must always keep: punctuation, plus words that carry
 # constraints. Dropping "not" or "exactly" silently inverts or loosens a
 # requirement. Each is a single token in the model's vocabulary.
 FORCE_TOKENS = [
-    "\n", "?", "!", ".", ",", ":",
+    "\n", "?", "!", ".", ",", ":", "_",
     "not", "Not", "no", "No", "never", "Never", "without", "don", "Don", "avoid",
     "must", "Must", "only", "Only", "exactly", "least", "most", "each",
 ]
@@ -39,8 +43,13 @@ FORCE_TOKENS = [
 # tend to be the instruction itself ("Summarize ..." -> "evolution three sentences").
 MIN_TOKENS = 40
 
-# The model returns word pieces re-joined with spaces: "don ' t", "5 - 7 - 5".
-_SPACED_JOINER = re.compile(r"(?<=\w) ([-'’/]) (?=\w)")
+# The model returns word pieces re-joined with spaces: "don ' t", "5 - 7 - 5",
+# "customer _ id". Identifiers and contractions must be glued back together.
+_SPACED_JOINER = re.compile(r"(?<=\w) ([-'’/_]) (?=\w)")
+# Safety net if the apostrophe itself was dropped: "don t" -> "don't".
+_BROKEN_CONTRACTION = re.compile(
+    r"\b(don|doesn|didn|isn|aren|wasn|weren|can|couldn|won|wouldn|shouldn|haven|hasn) t\b", re.I
+)
 _SPACE_BEFORE_PUNCT = re.compile(r" ([,.?!:;])")
 _DUPLICATE_PUNCT = re.compile(r"[,;:]([.?!])")
 
@@ -50,7 +59,7 @@ _lock = threading.Lock()
 
 
 def enabled() -> bool:
-    if config.COMPRESSOR == "llm":
+    if config.COMPRESSOR in ("llm", "rules"):
         return False
     return importlib.util.find_spec("llmlingua") is not None
 
@@ -88,6 +97,7 @@ def _compress_prose(text: str, rate: float) -> str:
 
 def clean(text: str) -> str:
     text = _SPACED_JOINER.sub(r"\1", text)
+    text = _BROKEN_CONTRACTION.sub(r"\1't", text)
     text = _SPACE_BEFORE_PUNCT.sub(r"\1", text)
     return _DUPLICATE_PUNCT.sub(r"\1", text)
 
@@ -96,15 +106,26 @@ def compress(text: str, rate: float | None = None) -> str:
     if count_tokens(text) < MIN_TOKENS:
         return text
 
+    prose_only = CODE_BLOCK.sub(" ", text)
+    if UNFENCED_CODE.search(prose_only):
+        log.info("Skipping %s: prompt contains unfenced code", NAME)
+        return text
+
     rate = rate or config.COMPRESSION_RATE
     prose_parts = CODE_BLOCK.split(text)
     code_blocks = CODE_BLOCK.findall(text)
 
-    pieces = []
+    out = ""
     for i, prose in enumerate(prose_parts):
         if prose.strip():
-            pieces.append(_compress_prose(prose.strip(), rate))
+            out += re.sub(r"[ \t]+", " ", _compress_prose(prose.strip(), rate))
         if i < len(code_blocks):
-            pieces.append(code_blocks[i])
+            block = code_blocks[i]
+            # Fenced blocks go on their own lines; inline spans stay in the
+            # sentence. Code is inserted verbatim, whitespace included.
+            if block.startswith("```"):
+                out = out.rstrip(" ") + f"\n{block}\n"
+            else:
+                out = out.rstrip(" ") + f" {block} "
 
-    return "\n".join(pieces)
+    return out.strip()
