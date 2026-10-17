@@ -1,6 +1,7 @@
 import React from "react";
 import { AgentProvider } from "./AgentContext";
 import { HistoryProvider } from "./HistoryContext";
+import { SettingsProvider } from "./SettingsContext";
 import { ThemeProvider } from "./ThemeContext";
 
 export default function AppProvider({
@@ -10,9 +11,11 @@ export default function AppProvider({
 }) {
   return (
     <ThemeProvider>
-      <HistoryProvider>
-        <AgentProvider>{children}</AgentProvider>
-      </HistoryProvider>
+      <SettingsProvider>
+        <HistoryProvider>
+          <AgentProvider>{children}</AgentProvider>
+        </HistoryProvider>
+      </SettingsProvider>
     </ThemeProvider>
   );
 }

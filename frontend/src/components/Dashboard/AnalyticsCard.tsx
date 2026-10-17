@@ -73,9 +73,9 @@ export default function AnalyticsCards() {
 
       <Card
 
-        title="Confidence"
+        title="Judge Score"
 
-        value={`${result.confidence}%`}
+        value={result.confidence !== null ? `${result.confidence}%` : "—"}
 
         icon={<Brain size={26}/>}
 
@@ -121,25 +121,31 @@ export default function AnalyticsCards() {
 
       <Card
 
-        title="Security"
+        title="Prompt Risk"
 
-        value="SAFE"
+        value={result.risk?.risk ?? "—"}
 
         icon={<Shield size={26}/>}
 
-        color="text-emerald-400"
+        color={result.risk?.risk === "LOW" ? "text-emerald-400" : "text-amber-400"}
 
       />
 
       <Card
 
-        title="Latency"
+        title="Answer Checks"
 
-        value="<1 sec"
+        value={
+          result.checks === null
+            ? "—"
+            : result.checks.passed
+              ? "Passed"
+              : `${result.checks.issues.length} issue${result.checks.issues.length > 1 ? "s" : ""}`
+        }
 
         icon={<Clock3 size={26}/>}
 
-        color="text-pink-400"
+        color={result.checks?.passed === false ? "text-amber-400" : "text-pink-400"}
 
       />
 

@@ -50,6 +50,32 @@ export default function OptimizationResult({ result }: Props) {
         ))}
       </div>
 
+      {/* How it was compressed */}
+      <div className="rounded-2xl border border-white/10 bg-[#101010] px-6 py-4 text-sm">
+        <p className="text-gray-400">
+          Compressed with <span className="font-semibold text-white">{result.backend}</span>
+          {" · "}
+          <span className={result.overhead_tokens === 0 ? "text-green-400" : "text-amber-400"}>
+            {result.overhead_tokens === 0
+              ? "0 API tokens spent"
+              : `${result.overhead_tokens} API tokens spent on the rewrite`}
+          </span>
+        </p>
+        {result.removed_phrases?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {result.removed_phrases.map((r, i) => (
+              <span
+                key={i}
+                title={r.label}
+                className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-0.5 text-xs text-red-300 line-through decoration-red-400/60"
+              >
+                {r.text}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* Score card */}
       <div className="rounded-2xl border border-white/10 bg-[#101010] px-6 py-5">
         <div className="flex items-center justify-between">

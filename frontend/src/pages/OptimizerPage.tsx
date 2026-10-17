@@ -10,9 +10,10 @@ import BudgetPlanner from "../components/Dashboard/BudgetPlanner";
 import CostCalculator from "../components/Dashboard/CostCalculator";
 import ChatSimulator from "../components/Simulator/ChatSimulator";
 
-import { optimizePrompt, enhancePrompt } from "../services/api";
+import { apiErrorMessage, optimizePrompt, enhancePrompt } from "../services/api";
 import type { OptimizeResponse } from "../types/api";
 import { useHistory } from "../context/HistoryContext";
+import { useSettings } from "../context/SettingsContext";
 
 const MODELS = ["gpt-4o", "gpt-3.5-turbo", "claude-3-opus", "gemini-pro"] as const;
 type ModelName = (typeof MODELS)[number];
@@ -30,6 +31,7 @@ export default function OptimizerPage() {
   const [result, setResult] = useState<OptimizeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const { addEntry } = useHistory();
+  const { mode, geminiKey } = useSettings();
 
   // live token estimate (~4 chars/token)
   const liveTokens = Math.ceil(prompt.length / 4);
@@ -38,7 +40,8 @@ export default function OptimizerPage() {
     if (!prompt.trim()) { toast.error("Enter a prompt first"); return; }
     setLoading(true);
     try {
-      const res = await optimizePrompt(prompt);
+      // Compression is local in both modes, so this works without a key.
+      const res = await optimizePrompt(prompt, { mode, geminiKey });
       setResult(res);
       addEntry({
         originalPrompt: prompt,
@@ -51,8 +54,8 @@ export default function OptimizerPage() {
         optimized: res.optimized,
       });
       toast.success(`Saved ${res.saved_tokens} tokens (${res.savings_percent}%)`);
-    } catch {
-      toast.error("Optimization failed — is the backend running?");
+    } catch (err) {
+      toast.error(apiErrorMessage(err), { duration: 6000 });
     } finally {
       setLoading(false);
     }
@@ -60,13 +63,14 @@ export default function OptimizerPage() {
 
   async function handleEnhance() {
     if (!prompt.trim()) { toast.error("Enter a prompt first"); return; }
+    if (mode === "ai" && !geminiKey) { toast.error("AI mode needs your Gemini API key. Add it in Settings."); return; }
     setLoading(true);
     try {
-      const res = await enhancePrompt(prompt);
+      const res = await enhancePrompt(prompt, { mode, geminiKey });
       setPrompt(res.enhanced);
       toast.success("Prompt enhanced");
-    } catch {
-      toast.error("Enhance failed — is the backend running?");
+    } catch (err) {
+      toast.error(apiErrorMessage(err), { duration: 6000 });
     } finally {
       setLoading(false);
     }

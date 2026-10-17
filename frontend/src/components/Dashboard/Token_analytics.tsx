@@ -39,11 +39,11 @@ export default function TokenAnalytics() {
     const tokenData = [
         {
             name: "Original",
-            tokens: result.original_prompt.split(/\s+/).length,
+            tokens: result.tokens.original,
         },
         {
             name: "Optimized",
-            tokens: result.processed_prompt.split(/\s+/).length,
+            tokens: result.tokens.optimized,
         },
     ];
 

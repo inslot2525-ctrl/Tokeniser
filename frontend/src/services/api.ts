@@ -5,10 +5,13 @@ import type {
   TokenResponse,
   EnhanceResponse,
   DashboardStats,
+  Mode,
 } from "../types/api";
 
+export const API_URL: string = import.meta.env.VITE_API_URL ?? "";
+
 const http = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: API_URL,
   headers: {
     "Content-Type": "application/json",
     // Only needed when the backend sets API_KEY. A key shipped in a browser
@@ -16,36 +19,53 @@ const http = axios.create({
     ...(import.meta.env.VITE_API_KEY && { "X-API-Key": import.meta.env.VITE_API_KEY }),
   },
 });
-const body = (prompt: string) => ({ prompt });
 
-export async function runAgent(prompt: string): Promise<AgentResponse> {
-  const { data } = await http.post("/agent", body(prompt));
-  return data;
+/** Which mode to run in, and the user's own Gemini key for AI mode. */
+export interface ModelOptions {
+  mode: Mode;
+  geminiKey?: string;
 }
 
-export async function optimizePrompt(prompt: string): Promise<OptimizeResponse> {
-  const { data } = await http.post("/optimize", body(prompt));
-  return data;
+const FREE: ModelOptions = { mode: "free" };
+
+function post<T>(path: string, prompt: string, opts: ModelOptions, signal?: AbortSignal) {
+  // The key is sent only in AI mode, and only to this backend.
+  const headers = opts.mode === "ai" && opts.geminiKey ? { "X-Gemini-Key": opts.geminiKey } : {};
+  return http
+    .post<T>(path, { prompt, mode: opts.mode }, { headers, signal })
+    .then((r) => r.data);
 }
 
-export async function smartOptimize(prompt: string): Promise<OptimizeResponse> {
-  const { data } = await http.post("/smart-optimize", body(prompt));
-  return data;
-}
+export const runAgent = (prompt: string, opts: ModelOptions = FREE, signal?: AbortSignal) =>
+  post<AgentResponse>("/agent", prompt, opts, signal);
 
-export async function enhancePrompt(prompt: string): Promise<EnhanceResponse> {
-  const { data } = await http.post("/enhance", body(prompt));
-  return data;
-}
+export const optimizePrompt = (prompt: string, opts: ModelOptions = FREE) =>
+  post<OptimizeResponse>("/optimize", prompt, opts);
 
-export async function tokenizePrompt(prompt: string): Promise<TokenResponse> {
-  const { data } = await http.post("/tokenize", body(prompt));
-  return data;
-}
+export const smartOptimize = (prompt: string, opts: ModelOptions = FREE) =>
+  post<OptimizeResponse>("/smart-optimize", prompt, opts);
+
+export const enhancePrompt = (prompt: string, opts: ModelOptions = FREE) =>
+  post<EnhanceResponse>("/enhance", prompt, opts);
+
+export const tokenizePrompt = (prompt: string) =>
+  post<TokenResponse>("/tokenize", prompt, FREE);
 
 export async function getDashboard(): Promise<DashboardStats> {
   const { data } = await http.get("/dashboard");
   return data;
+}
+
+/** The backend's error detail (e.g. "AI mode needs a Gemini API key…"), or a
+ * fallback when the request never reached it. */
+export function apiErrorMessage(err: unknown, fallback = "Unable to reach the backend. Is it running?") {
+  if (axios.isAxiosError(err)) {
+    const detail = err.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail) && detail[0]?.msg) return String(detail[0].msg); // 422 validation
+    if (err.response?.status === 429) return "Rate limit reached. Try again in a minute.";
+  }
+  return fallback;
 }
 
 export default http;

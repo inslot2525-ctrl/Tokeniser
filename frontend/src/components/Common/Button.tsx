@@ -10,6 +10,7 @@ interface Props {
   disabled?: boolean;
   className?: string;
   type?: "button" | "submit" | "reset";
+  title?: string;
 }
 
 const variants: Record<Variant, string> = {
@@ -28,12 +29,14 @@ export default function Button({
   disabled = false,
   className,
   type = "button",
+  title,
 }: Props) {
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={clsx(
         "rounded-xl px-5 py-2.5 text-sm font-semibold transition duration-200",
         variants[variant],

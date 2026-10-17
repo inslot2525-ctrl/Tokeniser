@@ -1,6 +1,7 @@
 import { useAgentContext } from "../../context/AgentContext";
 import useAgents from "../../hooks/useAgents";
 import { useHistory } from "../../context/HistoryContext";
+import { useSettings } from "../../context/SettingsContext";
 
 import PromptEditor from "../Prompt/PromptEditor";
 import PromptToolbar from "../Prompt/PromptToolbar";
@@ -12,7 +13,8 @@ import ResponseCard from "../Response/ResponseCard";
 import toast from "react-hot-toast";
 
 export default function Workspace() {
-  const { prompt, setResult, setIsLoading, error, startNewRun, stopRun } = useAgentContext();
+  const { prompt, setResult, setIsLoading, setError, startNewRun, stopRun } = useAgentContext();
+  const { mode, geminiKey } = useSettings();
   const { execute, cancel } = useAgents();
   const { addEntry } = useHistory();
 
@@ -28,12 +30,18 @@ export default function Workspace() {
       return;
     }
 
+    if (mode === "ai" && !geminiKey) {
+      toast.error("AI mode needs your Gemini API key. Add it in Settings.");
+      return;
+    }
+
     startNewRun();
 
-    const response = await execute(prompt);
+    const { response, error, cancelled } = await execute(prompt, { mode, geminiKey });
 
     if (response) {
       setResult(response);
+      const { tokens } = response;
       addEntry({
         route: response.route,
         model: response.model,
@@ -41,18 +49,21 @@ export default function Workspace() {
         optimized: response.processed_prompt,
         originalPrompt: response.original_prompt,
         optimizedPrompt: response.processed_prompt,
-        savedTokens: 0,
-        savingsPercent: 0,
-        confidence: response.confidence,
+        savedTokens: tokens.saved,
+        savingsPercent: tokens.original ? Math.round((tokens.saved / tokens.original) * 100) : 0,
+        confidence: response.confidence ?? undefined,
       });
-      toast.success("Agent completed");
+      toast.success(
+        response.response === null ? "Prompt optimized (no model ran)" : "Agent completed"
+      );
 
       // Scroll to response after a short delay so the DOM has rendered
       setTimeout(() => {
         document.getElementById("response-card")?.scrollIntoView({ behavior: "smooth", block: "start" });
       }, 100);
-    } else if (error !== "Stopped by user") {
-      toast.error("Agent failed — check the backend");
+    } else if (!cancelled) {
+      setError(error);
+      toast.error(error, { duration: 6000 });
     }
 
     setIsLoading(false);

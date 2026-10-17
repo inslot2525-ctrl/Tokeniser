@@ -1,6 +1,9 @@
-import { Sparkles, Minimize2, Trash2, Copy, Square } from "lucide-react";
+import { Sparkles, Minimize2, Trash2, Copy, Square, KeyRound } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useAgentContext } from "../../context/AgentContext";
-import { enhancePrompt } from "../../services/api";
+import { useSettings } from "../../context/SettingsContext";
+import { apiErrorMessage, enhancePrompt } from "../../services/api";
+import type { Mode } from "../../types/api";
 import Button from "../Common/Button";
 import toast from "react-hot-toast";
 
@@ -9,8 +12,15 @@ interface Props {
   onStop: () => void;
 }
 
+const MODES: { value: Mode; label: string; hint: string }[] = [
+  { value: "free", label: "Free", hint: "Rules and local models only. Nothing is sent to Gemini." },
+  { value: "ai", label: "AI", hint: "Uses Gemini with your own API key." },
+];
+
 export default function PromptToolbar({ onRun, onStop }: Props) {
   const { prompt, setPrompt, isLoading } = useAgentContext();
+  const { mode, setMode, geminiKey } = useSettings();
+  const needsKey = mode === "ai" && !geminiKey;
 
   async function handleCopy() {
     if (!prompt) return;
@@ -21,11 +31,11 @@ export default function PromptToolbar({ onRun, onStop }: Props) {
   async function handleEnhance() {
     if (!prompt.trim()) return;
     try {
-      const res = await enhancePrompt(prompt);
+      const res = await enhancePrompt(prompt, { mode, geminiKey });
       setPrompt(res.enhanced);
       toast.success("Prompt enhanced");
-    } catch {
-      toast.error("Enhance failed — is the backend running?");
+    } catch (err) {
+      toast.error(apiErrorMessage(err), { duration: 6000 });
     }
   }
 
@@ -43,7 +53,7 @@ export default function PromptToolbar({ onRun, onStop }: Props) {
       ) : (
         <Button
           onClick={onRun}
-          disabled={!prompt.trim()}
+          disabled={!prompt.trim() || needsKey}
           className="flex items-center gap-2"
         >
           <Sparkles size={15} />
@@ -51,10 +61,46 @@ export default function PromptToolbar({ onRun, onStop }: Props) {
         </Button>
       )}
 
+      {/* Free / AI mode */}
+      <div
+        role="radiogroup"
+        aria-label="Mode"
+        className="flex rounded-xl border border-white/10 bg-black/40 p-1"
+      >
+        {MODES.map((m) => (
+          <button
+            key={m.value}
+            role="radio"
+            aria-checked={mode === m.value}
+            title={m.hint}
+            disabled={isLoading}
+            onClick={() => setMode(m.value)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+              mode === m.value
+                ? "bg-orange-500 text-white"
+                : "text-gray-400 hover:text-white"
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {needsKey && (
+        <Link
+          to="/settings"
+          className="flex items-center gap-1.5 text-xs font-medium text-amber-400 hover:text-amber-300"
+        >
+          <KeyRound size={13} />
+          Add your Gemini key
+        </Link>
+      )}
+
       <Button
         variant="secondary"
         onClick={handleEnhance}
-        disabled={isLoading || !prompt.trim()}
+        disabled={isLoading || !prompt.trim() || needsKey}
+        title={mode === "free" ? "Grammar fixes need a model: Ollama locally, or AI mode" : undefined}
         className="flex items-center gap-2"
       >
         <Minimize2 size={15} />
