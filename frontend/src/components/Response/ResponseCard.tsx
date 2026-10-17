@@ -34,8 +34,8 @@ export default function ResponseCard() {
     {
       icon: Brain,
       label: "Judge score",
-      value: result.confidence !== null ? `${result.confidence}%` : "—",
-      hint: result.confidence === null ? "Only scored when the Gemini judge runs (AI mode, local answers)" : undefined,
+      value: result.judge_score !== null ? `${result.judge_score}%` : "—",
+      hint: result.judge_score === null ? "Only scored when the Gemini judge runs (AI mode, local answers)" : undefined,
     },
     { icon: DollarSign, label: "Est. Cost", value: result.estimated_remote_cost },
     ...(tokens.saved > 0
@@ -92,11 +92,6 @@ export default function ResponseCard() {
             , or switch to AI mode with your Gemini key.
           </p>
         </div>
-      )}
-
-      {/* Planner reason */}
-      {result.planner_reason && (
-        <Section title="Planner Reasoning" value={result.planner_reason} />
       )}
 
       {/* Optimized prompt */}

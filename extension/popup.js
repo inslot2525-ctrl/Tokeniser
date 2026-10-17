@@ -1,221 +1,51 @@
 // Point this at your deployed backend to use the extension without running it locally.
 const API_BASE = "http://127.0.0.1:8000";
 
-const originalTokens =
-  document.getElementById(
-    "originalTokens"
-  );
+const $ = (id) => document.getElementById(id);
+const prompt = $("prompt");
+const output = $("output");
 
-const optimizedTokens =
-  document.getElementById(
-    "optimizedTokens"
-  );
-
-const savedTokens =
-  document.getElementById(
-    "savedTokens"
-  );
-
-const prompt =
-  document.getElementById("prompt");
-
-const output =
-  document.getElementById("output");
-
-const enhanceBtn =
-  document.getElementById(
-    "enhanceBtn"
-  );
-
-const compressBtn =
-  document.getElementById(
-    "compressBtn"
-  );
-
-const smartBtn =
-  document.getElementById(
-    "smartBtn"
-  );
-
-const copyBtn =
-  document.getElementById(
-    "copyBtn"
-  );
-
-function updateMetrics(data) {
-  if (
-    data.original_tokens !==
-      undefined &&
-    data.optimized_tokens !==
-      undefined
-  ) {
-    originalTokens.textContent =
-      data.original_tokens;
-
-    optimizedTokens.textContent =
-      data.optimized_tokens;
-
-    const percent =
-      data.savings_percent || 0;
-
-    savedTokens.textContent =
-      percent + "%";
-
-    if (percent > 25) {
-      savedTokens.style.color =
-        "#10b981";
-    } else if (percent > 10) {
-      savedTokens.style.color =
-        "#f59e0b";
-    } else {
-      savedTokens.style.color =
-        "#ef4444";
-    }
-  }
+async function call(path) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: prompt.value }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.detail || `Request failed (${response.status})`);
+  return data;
 }
 
-enhanceBtn.addEventListener(
-  "click",
-  async () => {
-    try {
-      const response =
-        await fetch(
-          `${API_BASE}/enhance`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              prompt: prompt.value,
-            }),
-          }
-        );
+function showMetrics({ original_tokens, optimized_tokens, savings_percent = 0 }) {
+  $("originalTokens").textContent = original_tokens;
+  $("optimizedTokens").textContent = optimized_tokens;
+  const saved = $("savedTokens");
+  saved.textContent = `${savings_percent}%`;
+  saved.style.color = savings_percent > 25 ? "#10b981" : savings_percent > 10 ? "#f59e0b" : "#ef4444";
+}
 
-      if (!response.ok) {
-        throw new Error(
-          "Enhancement failed"
-        );
-      }
-
-      const data =
-        await response.json();
-
-      output.value =
-        data.enhanced;
-
-      if (
-        data.original_tokens
-      ) {
-        updateMetrics(data);
-      }
-    } catch (error) {
-      console.error(error);
-      alert(
-        "Enhancement failed"
-      );
-    }
+// Compress: local and free, works without any model or key.
+$("compressBtn").addEventListener("click", async () => {
+  try {
+    const data = await call("/compress");
+    output.value = data.optimized;
+    showMetrics(data);
+  } catch (error) {
+    alert(error.message);
   }
-);
+});
 
-compressBtn.addEventListener(
-  "click",
-  async () => {
-    try {
-      const response =
-        await fetch(
-          `${API_BASE}/compress`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              prompt: prompt.value,
-            }),
-          }
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          "Compression failed"
-        );
-      }
-
-      const data =
-        await response.json();
-
-      output.value =
-        data.optimized ||
-        data.compressed;
-
-      updateMetrics(data);
-    } catch (error) {
-      console.error(error);
-      alert(
-        "Compression failed"
-      );
-    }
+// Improve: grammar fixes, which need a model (Ollama running next to the backend).
+$("enhanceBtn").addEventListener("click", async () => {
+  try {
+    output.value = (await call("/enhance")).enhanced;
+  } catch (error) {
+    alert(error.message);
   }
-);
+});
 
-smartBtn.addEventListener(
-  "click",
-  async () => {
-    try {
-      const response =
-        await fetch(
-          `${API_BASE}/smart-optimize`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
-            body: JSON.stringify({
-              prompt: prompt.value,
-            }),
-          }
-        );
-
-      if (!response.ok) {
-        throw new Error(
-          "Smart optimization failed"
-        );
-      }
-
-      const data =
-        await response.json();
-
-      output.value =
-        data.optimized;
-
-      updateMetrics(data);
-    } catch (error) {
-      console.error(error);
-      alert(
-        "Smart optimization failed"
-      );
-    }
-  }
-);
-
-copyBtn.addEventListener(
-  "click",
-  async () => {
-    try {
-      await navigator.clipboard.writeText(
-        output.value
-      );
-
-      alert("Copied!");
-    } catch (error) {
-      console.error(error);
-      alert(
-        "Copy failed"
-      );
-    }
-  }
-);
+$("copyBtn").addEventListener("click", async () => {
+  await navigator.clipboard.writeText(output.value);
+  $("copyBtn").textContent = "Copied!";
+  setTimeout(() => ($("copyBtn").textContent = "Copy"), 1500);
+});

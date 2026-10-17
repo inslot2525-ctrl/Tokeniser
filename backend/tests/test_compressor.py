@@ -4,8 +4,8 @@ import pytest
 
 from app import config
 from app.engine import compressor
-from app.engine.optimizer import rewrite_with_metrics
-from app.engine.planner import plan_actions
+from app.engine.optimizer import compress_with_metrics
+
 HAS_LINGUA = importlib.util.find_spec("llmlingua") is not None
 
 # Long, with filler for the rules and substance left over for LLMLingua-2.
@@ -61,11 +61,10 @@ def test_clean_rejoins_word_pieces():
     assert compressor.clean("don t mention it, it doesn t matter") == "don't mention it, it doesn't matter"
 
 
-def test_rules_then_lingua_costs_no_api_tokens(fake_lingua, fake_llm):
-    result = rewrite_with_metrics(TECH_PROMPT, "compress")
-    assert result["backend"] == f"Rules + {compressor.NAME}"
+def test_rules_then_lingua_calls_no_model(fake_lingua, fake_llm):
+    result = compress_with_metrics(TECH_PROMPT)
+    assert result["method"] == f"Rules + {compressor.NAME}"
     assert {r["label"] for r in result["removed_phrases"]} >= {"greeting", "thanks"}
-    assert result["overhead_tokens"] == 0
     assert result["saved_tokens"] > 0
     assert fake_llm.calls == []
 
@@ -73,23 +72,15 @@ def test_rules_then_lingua_costs_no_api_tokens(fake_lingua, fake_llm):
 def test_rules_only_when_lingua_missing(monkeypatch, fake_llm):
     monkeypatch.setattr(config, "COMPRESSOR", "auto")
     monkeypatch.setattr(compressor, "enabled", lambda: False)
-    result = rewrite_with_metrics(TECH_PROMPT, "compress")
-    assert result["backend"] == "Rules"
+    result = compress_with_metrics(TECH_PROMPT)
+    assert result["method"] == "Rules"
     assert result["saved_tokens"] > 0
     assert fake_llm.calls == []
 
 
-def test_enhance_still_uses_llm(fake_lingua, fake_llm):
-    result = rewrite_with_metrics("fix my grammer pls", "enhance")
-    assert "Rules" not in result["backend"]
-    assert len(fake_llm.calls) == 1
-
-
-def test_planner_always_compresses_locally(fake_lingua):
-    assert "LLMLingua-2" in plan_actions(TECH_PROMPT)["reason"]
-    short = plan_actions("Hi! What is DNS?")
-    assert short["optimize"] is True and "rules" in short["reason"]
-    assert "LLMLingua-2" not in short["reason"]
+def test_short_prompt_gets_rules_only(fake_lingua):
+    # Rules remove the filler; what's left is too short for LLMLingua-2.
+    assert compress_with_metrics("Hi! What is DNS? Thanks!")["method"] == "Rules"
 
 
 def test_agent_net_savings_equal_gross_with_local_compression(client, fake_lingua, fake_llm):
@@ -113,8 +104,8 @@ def test_free_mode_with_no_model_still_compresses(client, fake_lingua, fake_llm)
     assert fake_llm.calls == []
 
 
-def test_llm_setting_disables_compressor(monkeypatch):
-    monkeypatch.setattr(config, "COMPRESSOR", "llm")
+def test_rules_setting_disables_lingua(monkeypatch):
+    monkeypatch.setattr(config, "COMPRESSOR", "rules")
     assert compressor.enabled() is False
 
 

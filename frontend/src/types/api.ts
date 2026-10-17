@@ -22,7 +22,7 @@ export interface TokenAccounting {
   original: number;
   optimized: number;
   saved: number;
-  /** Tokens spent by the pipeline's own rewrite and verifier calls. */
+  /** Tokens spent by the pipeline's own calls (the Gemini judge). */
   pipeline_overhead: number;
   /** saved - pipeline_overhead; negative when the pipeline cost more than it saved. */
   net_saved: number;
@@ -37,13 +37,12 @@ export interface AgentResponse {
   mode: Mode;
   original_prompt: string;
   processed_prompt: string;
-  planner_reason: string;
   steps: string[];
   /** "Local" | "Gemini" | "Blocked" | "Not answered" */
   route: string;
   model: string;
-  /** Judge score x10; null unless the Gemini judge scored the answer. */
-  confidence: number | null;
+  /** Judge score as a percentage; null unless the Gemini judge ran. */
+  judge_score: number | null;
   estimated_remote_cost: string;
   /** null when no model was available to answer (free mode without Ollama). */
   response: string | null;
@@ -60,25 +59,23 @@ export interface AgentResponse {
   tokens: TokenAccounting;
 }
 
-// ─── /optimize, /smart-optimize, /compress, /enhance response ───────────────
-export interface OptimizeResponse {
+// ─── /compress response ─────────────────────────────────────────────────────
+export interface CompressResponse {
   original: string;
   optimized: string;
   original_tokens: number;
   optimized_tokens: number;
   saved_tokens: number;
   savings_percent: number;
-  overhead_tokens: number;
-  backend: string;
+  /** "Rules" or "Rules + LLMLingua-2" */
+  method: string;
   removed_phrases: { label: string; text: string }[];
 }
 
-export interface EnhanceResponse extends OptimizeResponse {
+// ─── /enhance response ──────────────────────────────────────────────────────
+export interface EnhanceResponse {
   enhanced: string;
-}
-
-export interface CompressResponse extends OptimizeResponse {
-  compressed: string;
+  model: string;
 }
 
 // ─── /tokenize response ─────────────────────────────────────────────────────

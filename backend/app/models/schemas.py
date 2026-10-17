@@ -25,13 +25,12 @@ class TokenResponse(BaseModel):
     tokens: int
 
 
-class OptimizationResponse(BaseModel):
+class CompressResponse(BaseModel):
     original: str
     optimized: str
     original_tokens: int
     optimized_tokens: int
     saved_tokens: int
     savings_percent: float
-    overhead_tokens: int
-    backend: str
+    method: str  # "Rules" or "Rules + LLMLingua-2"
     removed_phrases: list[dict] = []

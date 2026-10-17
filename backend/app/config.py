@@ -45,7 +45,6 @@ VERIFY_THRESHOLD = _float("VERIFY_THRESHOLD", 8.0)
 
 # auto   = rule-based filler removal, then LLMLingua-2 if installed (default)
 # rules  = rule-based filler removal only
-# llm    = one LLM rewrite call (costs API tokens; the original behaviour)
 # lingua = alias for auto
 COMPRESSOR = os.getenv("COMPRESSOR", "auto").lower()
 LINGUA_MODEL = os.getenv(

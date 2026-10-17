@@ -47,7 +47,20 @@ def test_llm_failure_returns_502(client, monkeypatch):
 
     monkeypatch.setattr(llm, "ollama_generate", boom)
     monkeypatch.setattr(llm, "gemini_generate", boom)
-    assert ai(client, "/route", "hi").status_code == 502
+    assert ai(client, "/agent", "hi").status_code == 502
+
+
+def test_compress_endpoint_is_local_and_reports_removed_phrases(client, fake_llm):
+    body = client.post("/compress", json={"prompt": "Hi! Could you please explain DNS? Thanks!"}).json()
+    assert body["optimized"] == "Explain DNS."
+    assert body["method"] == "Rules"
+    assert [r["label"] for r in body["removed_phrases"]] == ["greeting", "asking", "thanks"]
+    assert fake_llm.calls == []
+
+
+def test_removed_endpoints_are_gone(client):
+    for path in ["/optimize", "/smart-optimize", "/route"]:
+        assert client.post(path, json={"prompt": "hi"}).status_code == 404
 
 
 # ─── Free mode ───────────────────────────────────────────────────────────────
@@ -162,15 +175,15 @@ def test_agent_blocks_high_risk_without_calling_llm(client, fake_llm):
     assert fake_llm.calls == []
 
 
-def test_agent_short_prompt_skips_rewrite_and_verifies_local(client, fake_llm):
+def test_ai_mode_judges_local_answer(client, fake_llm):
     fake_llm.remote_reply = lambda p: '{"score": 9, "reason": "good"}'
     body = ai(client, "/agent", "What is DNS?").json()
 
     assert body["mode"] == "ai"
     assert body["route"] == "Local"
     assert body["verification"]["score"] == 9
-    assert body["confidence"] == 90
-    # One local answer + one Gemini judge call; no rewrite for a short prompt.
+    assert body["judge_score"] == 90
+    # One local answer + one Gemini judge call.
     assert [backend for backend, _ in fake_llm.calls] == [llm.LOCAL, llm.REMOTE]
 
 
@@ -181,7 +194,9 @@ def test_agent_escalates_weak_local_answer(client, fake_llm):
     body = ai(client, "/agent", "What is DNS?").json()
     assert body["route"] == "Gemini"
     assert body["response"] == "better answer"
-    assert "Escalated to Gemini after low verifier score" in body["steps"]
+    assert "Escalated to Gemini after low judge score" in body["steps"]
+    # The answer cost is counted even though the local answer was discarded.
+    assert body["estimated_remote_cost"] != "$0.000000"
 
 
 def test_failed_rule_check_escalates_without_judge_call(client, fake_llm):
@@ -196,15 +211,14 @@ def test_failed_rule_check_escalates_without_judge_call(client, fake_llm):
     assert "evaluator" not in fake_llm.calls[1][1]
 
 
-def test_agent_reports_net_savings_including_overhead(client, fake_llm):
-    fake_llm.local_reply = lambda p: "Explain DNS." if "rewriting engine" in p else "answer"
+def test_agent_reports_net_savings_including_judge_overhead(client, fake_llm):
     fake_llm.remote_reply = lambda p: '{"score": 9}'
-    body = ai(client, "/agent", LONG_PROMPT + "explain DNS").json()
+    body = ai(client, "/agent", "Hi there! Could you please explain DNS? Thanks so much!").json()
 
     tokens = body["tokens"]
     assert body["processed_prompt"] == "Explain DNS."
     assert tokens["saved"] > 0
-    assert tokens["pipeline_overhead"] > 0
+    assert tokens["pipeline_overhead"] > 0  # the judge call
     assert tokens["net_saved"] == tokens["saved"] - tokens["pipeline_overhead"]
 
 
