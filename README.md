@@ -152,6 +152,9 @@ cd backend && pytest                      # 117 tests
 <details>
 <summary><b>Deploying (e.g. Render + Vercel)</b></summary>
 
+- **Render (backend):** New → Blueprint → pick this repo. [`render.yaml`](render.yaml) builds the rules-only image; set `CORS_ORIGINS` to your frontend's URL when prompted.
+- **Vercel (frontend):** import the repo, set the root directory to `frontend` and `VITE_API_URL` to the Render URL. [`vercel.json`](frontend/vercel.json) makes deep links like `/optimizer` work.
+- Both deploy the branch you pick, so merge into `main` first if that's what they track.
 - **Don't set `GEMINI_API_KEY`** on a public backend. Users bring their own key, so there's no shared quota to drain.
 - Set `CORS_ORIGINS` to your frontend's URL, and `VITE_API_URL` on the frontend to your backend's URL.
 - Small hosts (Render's free tier has 512 MB) can't run LLMLingua-2. Use the default image, which compresses with rules alone.
