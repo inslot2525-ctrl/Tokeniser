@@ -52,3 +52,6 @@ LINGUA_MODEL = os.getenv(
 )
 # Fraction of tokens LLMLingua-2 keeps.
 COMPRESSION_RATE = _float("COMPRESSION_RATE", 0.6)
+# Hold compression to the prompt's contract (numbers, negations, relations,
+# quoted payloads). Turn off to measure compression without the guard.
+CONTRACT_GUARD = os.getenv("CONTRACT_GUARD", "on").strip().lower() not in ("off", "false", "0", "no")

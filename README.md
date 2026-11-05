@@ -21,12 +21,13 @@ Works without an API key. Add your own Gemini key when you want more.
 ## Features
 
 - **Free and AI modes.** Free mode runs on rules and local models and never calls a paid API. AI mode uses Gemini with **the user's own key**, so the app owner pays nothing and has no shared key to leak.
-- **Compression that costs zero API tokens.** Rule-based filler removal, then [LLMLingua-2](https://github.com/microsoft/LLMLingua) on-device, cuts **44% of prompt tokens** on the eval set. Code, numbers and constraint words ("not", "exactly", "must") are kept intact.
+- **Compression that costs zero API tokens.** Rule-based filler removal, then [LLMLingua-2](https://github.com/microsoft/LLMLingua) on-device, cuts **43% of prompt tokens** on the eval set. Code and quoted text pass through untouched, and the prompt's numbers, negations and limits are checked afterwards (see [the contract](#the-prompts-contract)).
+- **Compression held to the prompt's contract.** Before compressing, TokenWise lists what the prompt requires: numbers, negations, "at least"-style limits, and text the answer must reproduce. Those words are protected, and if LLMLingua-2 still drops one, its output is discarded and only the filler removal is kept. The response says what was kept.
 - **Rule-based answer checks.** Every answer is checked for refusals, truncation, missing code, wrong item counts ("exactly four" answered with five) and words the prompt ruled out ("don't mention Kubernetes"). In AI mode, a local answer that fails a check goes straight to Gemini, with no judge call needed.
 - **Routing by difficulty.** A transparent classifier sends easy prompts to a local Gemma model and hard ones to Gemini, and explains each decision.
 - **Net token accounting.** Every response reports what the pipeline itself spent, so savings are net savings.
 - **Jailbreak screening.** Common jailbreak, injection and exfiltration phrasings are blocked before any model call, even with odd spacing or leetspeak.
-- **Built for real traffic.** Rate limiting, input caps, timeouts, clear errors (400 / 401 / 503), SQLite metrics, 61 tests, CI and Docker.
+- **Built for real traffic.** Rate limiting, input caps, timeouts, clear errors (400 / 401 / 503), SQLite metrics, 103 tests, CI and Docker.
 
 ## Two modes
 
@@ -60,7 +61,9 @@ flowchart LR
     R -- high risk --> B([Blocked])
     R -- ok --> CR[Rules<br>remove filler]
     CR --> CL[LLMLingua-2<br>if installed]
-    CL --> C[Classify]
+    CL --> V{Contract<br>kept?}
+    V -- yes --> C[Classify]
+    V -- "no: keep rules only" --> C
     C -- easy / medium --> L[Local · Ollama]
     C -- hard, AI mode --> G[Gemini]
     L --> K{Rule checks}
@@ -86,6 +89,30 @@ The first version optimized prompts by asking an LLM to rewrite them. That rewri
 ```
 
 Local compression fixes this. `pipeline_overhead` for compression is 0, so every saved token is a net saving, and the LLM rewrite was removed.
+
+### The prompt's contract
+
+Token-dropping compressors report how many tokens they removed, not whether the prompt still asks for the same thing. With the guard off, LLMLingua-2 turned `Contain 6 or more exclamation marks` into `Contain 6 exclamation marks` (which asks for a different thing), and `Finish the poem with this exact phrase: "Can I get my money back for the classes I missed?"` into `Finish poem phrase: get money back for classes missed?`.
+
+[`contract.py`](backend/app/engine/contract.py) reads the prompt first and lists what it requires:
+
+| Kind | Examples | If compression loses one |
+|---|---|---|
+| number | `4`, `300+`, `two` (the count must match) | compression is discarded |
+| negation | `not`, `don't`, `never`, `without` | compression is discarded |
+| relation | `at least`, `exactly`, `or more`, `less than` | compression is discarded |
+| payload | `"quoted text"`, `<<title>>`, `******`, the text after `end with:` | compression is discarded |
+| format | `comma`, `bullet`, `paragraph`, `lowercase` | reported, not reverted |
+
+The prompt's own requirement words are passed to LLMLingua-2 as words it must keep, payloads are passed through untouched, and a prompt that asks to be repeated word for word isn't compressed at all. After compression the contract is checked again, and the `contract` field of the response reports the result:
+
+```json
+"contract": { "terms": 3, "kept": 3, "lost": [], "reverted": [], "verbatim": false }
+```
+
+`reverted` lists what a discarded LLMLingua-2 output had dropped. Set `CONTRACT_GUARD=off` to compress without the guard, for comparison. The check is plain regex, so it costs nothing, but it verifies that a requirement is still *stated*, not that it still *means* the same thing.
+
+The same contract-first idea applies after the answer: the judge and the router both see the original prompt, so a requirement that compression dropped can't hide from either.
 
 ## Quick start
 
@@ -119,7 +146,7 @@ npm ci && npm run dev                     # http://localhost:5173
 **Tests** run offline with a fake model, so no key is needed:
 
 ```bash
-cd backend && pytest                      # 61 tests
+cd backend && pytest                      # 103 tests
 ```
 
 <details>
@@ -149,7 +176,7 @@ Open `chrome://extensions`, enable **Developer mode**, click **Load unpacked** a
 | Endpoint | What it does |
 |---|---|
 | `POST /agent` | Full pipeline: risk check → compress → route → answer → checks |
-| `POST /compress` | Local compression only, with token metrics and the phrases removed (never calls a model) |
+| `POST /compress` | Local compression only, with token metrics, the phrases removed and the contract report (never calls a model) |
 | `POST /enhance` | Grammar and clarity (needs a model: Ollama or AI mode) |
 | `POST /tokenize` | Token count |
 | `POST /detect-risk` | Jailbreak / injection / exfiltration check |
@@ -175,6 +202,7 @@ A real response from the backend with no key and no Ollama:
   "processed_prompt": "List exactly four advantages of using Docker containers for deployment. Don't mention Kubernetes.",
   "steps": [
     "Prompt compressed with Rules (removed asking, greeting, pleasantry, politeness, thanks)",
+    "Contract kept: all 3 requirements still stated",
     "No model available to answer; recommended route is Local"
   ],
   "route": "Not answered",
@@ -187,6 +215,7 @@ A real response from the backend with no key and no Ollama:
   },
   "checks": null,
   "verification": null,
+  "contract": { "terms": 3, "kept": 3, "lost": [], "reverted": [], "verbatim": false },
   "judge_score": null,
   "estimated_remote_cost": "$0.000000",
   "tokens": { "original": 32, "optimized": 15, "saved": 17, "pipeline_overhead": 0, "net_saved": 17 }
@@ -203,9 +232,9 @@ A real response from the backend with no key and no Ollama:
 | Method | Tokens saved | API tokens spent | Latency (median, CPU) | Runs on a 512 MB host |
 |---|---|---|---|:---:|
 | Rules | **15.1%** (161 of 1,065) | 0 | < 1 ms | ✓ |
-| Rules + LLMLingua-2 | **44.4%** (473 of 1,065) | 0 | ~0.3 s | ✗ |
+| Rules + LLMLingua-2 | **42.7%** (455 of 1,065) | 0 | ~0.3 s | ✗ |
 
-On prompts of 40+ tokens, rules + LLMLingua-2 saves 46.9%. Short prompts are left to the rules alone, because the model tends to drop the instruction verb ("Summarize the theory of evolution…" became "evolution three sentences"). Prompts containing unfenced code skip LLMLingua-2 entirely, because it mangled `i <= arr.length; i++`. Full tables and samples: [`results-rules.md`](backend/eval/results-rules.md), [`results-lingua.md`](backend/eval/results-lingua.md).
+On prompts of 40+ tokens, rules + LLMLingua-2 saves 45.1%. The [contract guard](#the-prompts-contract) costs 1.7 points on this set (44.4% before it was added), almost all of it from `constraint-1` (29 → 48 tokens): its quoted word `'fall'` splits the prompt into pieces too short to compress safely. Short prompts are left to the rules alone, because the model tends to drop the instruction verb ("Summarize the theory of evolution…" became "evolution three sentences"). Prompts containing unfenced code skip LLMLingua-2 entirely, because it mangled `i <= arr.length; i++`. Full tables and samples: [`results-rules.md`](backend/eval/results-rules.md), [`results-lingua.md`](backend/eval/results-lingua.md).
 
 ```
 Original:  I would like you to list exactly four advantages of using Docker containers for deployment. Please number
@@ -246,6 +275,7 @@ All settings are environment variables; see [`backend/.env.example`](backend/.en
 | `OLLAMA_URL` · `OLLAMA_MODEL` | `localhost:11434` · `gemma3:4b` | Local model |
 | `COMPRESSOR` | `auto` | `auto` (rules + LLMLingua-2 if installed) or `rules` |
 | `COMPRESSION_RATE` | `0.6` | Fraction of tokens LLMLingua-2 keeps |
+| `CONTRACT_GUARD` | `on` | Protect the prompt's requirements and discard LLMLingua-2 output that drops one. `off` to compare |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated allowed origins |
 | `API_KEY` | *(off)* | Require `X-API-Key` on model endpoints |
 | `RATE_LIMIT_PER_MINUTE` | `20` | Per-IP limit on model endpoints |
@@ -270,6 +300,7 @@ backend/
     engine/
       agent.py            Pipeline orchestration + token accounting
       llm.py              Gemini / Ollama clients, per-request key scope
+      contract.py         What a prompt requires, and whether compression kept it
       rule_compressor.py  Rule-based filler removal
       compressor.py       LLMLingua-2 compression
       optimizer.py        Compression chain (rules -> LLMLingua-2) + enhance
@@ -289,6 +320,7 @@ extension/                Chrome extension (Manifest V3)
 ## Limitations
 
 - **Answer quality after compression is unmeasured.** Token savings are measured; whether compressed prompts get equally good answers isn't yet (see [Evaluation](#evaluation)).
+- **The contract is found with regex.** It catches the requirement types in the table above and misses the rest: an instruction phrased in a way no pattern knows, or a list of forbidden names with no trigger phrase. It also checks that a requirement is still stated, not that it still means the same thing.
 - **Rules catch visible failures, not wrong answers.** The answer checks find refusals, truncation and broken constraints. Judging correctness needs a model, which is why AI mode adds the judge.
 - **Rule compression only knows its list.** It removes common English filler and nothing else, which is safe but limits the savings to 15%.
 - **Pattern-based risk check.** It stops low-effort attacks for free; paraphrased ones will get through. Production use needs a trained classifier or a moderation API.

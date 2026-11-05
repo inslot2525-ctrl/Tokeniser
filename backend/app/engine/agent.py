@@ -1,7 +1,8 @@
 """The /agent pipeline, in five steps:
 
     1. Risk check     block obvious jailbreak / exfiltration prompts
-    2. Compress       rules, then LLMLingua-2 if installed (no API tokens)
+    2. Compress       rules, then LLMLingua-2 if installed (no API tokens),
+                      held to the prompt's contract (see contract.py)
     3. Route          easy -> local model, hard -> Gemini (AI mode only)
     4. Answer         if no model is available, return the compressed prompt
     5. Check          free rule checks; in AI mode a local answer that fails
@@ -46,24 +47,28 @@ def run_agent(prompt: str) -> dict:
     if risk["risk"] == "MEDIUM":
         steps.append(f"Risk flagged ({risk['attack_type']}), continuing")
 
-    # 2. Compress
+    # 2. Compress, held to the prompt's contract
     compressed = compress(prompt)
-    current = compressed.text
+    current, contract = compressed.text, compressed.contract
     if count_tokens(current) < original_tokens:
         labels = sorted({r["label"] for r in compressed.removed})
         removed = f" (removed {', '.join(labels)})" if labels else ""
         steps.append(f"Prompt compressed with {compressed.method}{removed}")
     else:
         steps.append("Nothing to compress")
+    steps += _contract_steps(contract)
 
-    # 3. Route, 4. Answer
-    analysis = analyze_prompt(current)
+    # 3. Route, 4. Answer. The router classifies what the user asked: compression
+    # can delete the very words ("step by step") that mark a prompt as hard.
+    analysis = analyze_prompt(prompt)
+    analysis["estimated_input_tokens"] = count_tokens(current)  # what is actually sent
     try:
         answer = llm.generate(current, choose_backend(analysis))
     except llm.ModelUnavailable:
         # Free mode with no local model: the compressed prompt is the result.
         steps.append(f"No model available to answer; recommended route is {analysis['recommended_route']}")
-        return _finish(prompt, current, steps, risk=risk, analysis=analysis, route="Not answered")
+        return _finish(prompt, current, steps, risk=risk, analysis=analysis, route="Not answered",
+                       contract=contract)
     steps.append(f"Answered by {answer.model} ({answer.backend})")
 
     # 5. Check
@@ -73,15 +78,32 @@ def run_agent(prompt: str) -> dict:
     return _finish(
         prompt, current, steps, risk=risk, analysis=analysis,
         route=final.backend, model=final.model, response=final.text,
-        checks=checks, verification=verification,
+        checks=checks, verification=verification, contract=contract,
         pipeline_calls=[judge_call] if judge_call else [], answer_calls=answers,
     )
 
 
+def _contract_steps(contract: dict | None) -> list[str]:
+    """What the contract check found, for the step list."""
+    if not contract:
+        return []
+    quote = lambda terms: ", ".join(f"'{t['text']}'" for t in terms)
+    if contract["verbatim"]:
+        return ["Compression skipped: the prompt asks to be reproduced word for word"]
+    steps = []
+    if contract["reverted"]:
+        steps.append(f"Compression reverted to rules only: LLMLingua-2 dropped {quote(contract['reverted'])}")
+    if contract["lost"]:
+        steps.append(f"Contract flagged: the optimized prompt no longer states {quote(contract['lost'])}")
+    elif contract["terms"]:
+        steps.append(f"Contract kept: all {contract['terms']} requirements still stated")
+    return steps
+
+
 def _check_and_escalate(prompt, current, answer, steps):
-    """Rule checks run on every answer, against the ORIGINAL prompt so that no
-    constraint is hidden by compression. In AI mode a local answer is also
-    judged by Gemini; a failed check or a low score means Gemini re-answers.
+    """Rule checks and the judge both see the ORIGINAL prompt, so that no
+    constraint is hidden by compression. In AI mode a local answer is judged by
+    Gemini; a failed check or a low score means Gemini re-answers.
 
     Returns (every answer produced, judge call or None, verdict or None, checks)."""
     answers = [answer]
@@ -97,7 +119,7 @@ def _check_and_escalate(prompt, current, answer, steps):
             steps.append(f"Rule checks failed: {'; '.join(checks['issues'])}")
             reason = "Escalated to Gemini without a judge call"
         else:
-            verification, judge_call = verify_response(current, answer.text)
+            verification, judge_call = verify_response(prompt, answer.text)
             steps.append(f"Judge scored local answer {verification['score']}/10")
             reason = "Escalated to Gemini after low judge score"
 
@@ -115,7 +137,7 @@ def _check_and_escalate(prompt, current, answer, steps):
 
 
 def _finish(prompt, current, steps, *, risk, route, analysis=None, model="-", response=None,
-            checks=None, verification=None, pipeline_calls=(), answer_calls=()) -> dict:
+            checks=None, verification=None, contract=None, pipeline_calls=(), answer_calls=()) -> dict:
     original, optimized = count_tokens(prompt), count_tokens(current)
     overhead = sum(c.input_tokens + c.output_tokens for c in pipeline_calls)
     cost = sum(call_cost(c) for c in [*pipeline_calls, *answer_calls])
@@ -139,6 +161,7 @@ def _finish(prompt, current, steps, *, risk, route, analysis=None, model="-", re
         "analysis": analysis,
         "checks": checks,
         "verification": verification,
+        "contract": contract,  # what the prompt required and whether compression kept it; None if the guard is off
         # Judge score as a percentage; None unless the Gemini judge ran.
         "judge_score": round(judge_score * 10) if judge_score is not None else None,
         "estimated_remote_cost": format_cost(cost),
