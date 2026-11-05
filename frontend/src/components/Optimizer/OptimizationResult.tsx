@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Copy, CheckCircle } from "lucide-react";
 import { diffWords } from "diff";
+import ContractCard from "../Contract/ContractCard";
 import type { CompressResponse } from "../../types/api";
 
 interface Props {
@@ -58,6 +59,8 @@ export default function OptimizationResult({ result }: Props) {
           </div>
         )}
       </div>
+
+      <ContractCard contract={result.contract} />
 
       {/* Diff viewer */}
       <div className="rounded-2xl border border-white/10 bg-[#101010] p-6">

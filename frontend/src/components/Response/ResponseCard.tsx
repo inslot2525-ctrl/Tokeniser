@@ -1,5 +1,6 @@
 import { Copy, CheckCircle, Brain, Cpu, Route, DollarSign, Zap, ShieldCheck, AlertTriangle, Info } from "lucide-react";
 import { useState } from "react";
+import ContractCard from "../Contract/ContractCard";
 import { useAgentContext } from "../../context/AgentContext";
 import { isWarningStep } from "../../utils/steps";
 
@@ -105,6 +106,10 @@ export default function ResponseCard() {
           ) : undefined}
         />
       )}
+
+      <div className="mt-5">
+        <ContractCard contract={result.contract} />
+      </div>
 
       {/* Final response */}
       {answered && <Section title="Final Response" value={result.response!} />}
