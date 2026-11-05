@@ -39,7 +39,7 @@ class Term(NamedTuple):
 # compressed. Compressors pass these spans through whole.
 _TRIGGER = (
     r"(?:exact(?:ly)? (?:phrase|words|sentence|text)|(?:end|finish|conclude|close|start|begin)(?:ing)? with"
-    r"|read exactly like|say exactly|following (?:phrases?|sentences?|words?|keywords?))[^:\n]{0,40}:[ \t]*+"
+    r"|read exactly like|say exactly|following (?:phrases?|sentences?|words?|keywords?|options?|choices?))[^:\n]{0,40}:[ \t]*+"
 )
 PAYLOAD = re.compile(
     r"```.*?```"
@@ -59,7 +59,7 @@ _RELATION = re.compile(
 )
 _NUMBER_WORDS = (
     "two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
-    "twenty|thirty|forty|fifty|hundred|thousand|twice"
+    "twenty|thirty|forty|fifty|hundred|thousand|once|twice|single"
 )
 _FORMAT_NOUNS = (
     r"commas?|lower ?case|upper ?case|capitali[sz]ed|capital letters?|in capitals|json|markdown|bullets?|"
@@ -71,11 +71,14 @@ _NUMBER = re.compile(
 _FORMAT = re.compile(rf"\bp\.\s?s\.|\b(?:{_FORMAT_NOUNS})\b", re.I)
 
 # A prompt that asks to be reproduced is its own payload: any rewrite of it
-# changes what the answer must contain, so it is never compressed.
+# changes what the answer must contain, so it is never compressed. The same
+# goes for one that refers to its words by position, since compressing shifts
+# which word is "word 3".
 _VERBATIM = re.compile(
     r"word for word|verbatim|exactly as (?:written|given)|copy (?:it|this|the following) exactly"
     r"|repeat(?:ing)? (?:the |this |my )?(?:exact |same |entire |whole |above |following )*"
-    r"(?:request|question|prompt|sentence|text|query)",
+    r"(?:request|question|prompt|sentence|text|query)"
+    r"|(?:word|character|letter)s?[ -](?:index|indices|indexes|positions?)\b|\bindices\b|copy the span",
     re.I,
 )
 

@@ -78,7 +78,10 @@ steps are numbered in the code. The backend's app code is about 1,300 lines.
 - **42.7%** of tokens saved with rules + LLMLingua-2 (455 of 1,065 on 20 prompts); **15.1%** with rules alone.
 - **0** API tokens spent on compression.
 - **0 to 3** LLM calls per request: 0 in free mode without Ollama, up to 3 in AI mode (answer, judge, retry).
-- **103** backend tests (no network needed), plus a 13-check browser test.
+- **117** backend tests (no network needed), plus a 13-check browser test.
+- **Constraint survival** (IFBench, held-out half, 150 prompts): LLMLingua-2 alone leaves **85%** of
+  prompts with every requirement intact and loses a negation in 18 of them. With the contract
+  guard: **96.7%** intact, **0** negations lost, at 30.7% tokens saved instead of 43.7%.
 - JavaScript bundle reduced from **834 KB to 342 KB** by removing unused features.
 
 ## 6. Likely questions, with answers
@@ -103,6 +106,17 @@ the request word for word" isn't compressed at all. And after compression I chec
 again: if LLMLingua-2 still lost a number, negation, relation or payload, I throw its output
 away and keep only the rule-based filler removal. The weakness to admit: it's regex, and it
 checks a requirement is still *stated*, not that it still *means* the same.
+
+**How do you know the contract guard works, and isn't just tuned to your test?**
+I measured it on two public benchmarks whose prompts carry machine-checkable constraints,
+IFEval and IFBench, and scored from the benchmark's own labels rather than my code. I was
+careful about one thing: the patterns in my contract were written after reading IFEval's
+failures, so IFEval's 99% is in-sample. IFBench has different constraint types, so I split it by
+position, read failures from one half only, and only ever *counted* the other. On that held-out
+half the guard went from 88.5% of prompts intact (no guard) to 96.7%, with no negation lost.
+The first held-out run was 91.8%; two fixes I derived from the dev half moved it to 96.7%.
+What I'd say about the limits: it measures that a requirement is still *stated*, not that a
+model obeys it, and the guard costs savings (37% down to 31% on the held-out half).
 
 **How do you know compression doesn't make the answers worse?**
 Two layers. The contract check above guards the prompt, and the answer checks and the judge
@@ -146,7 +160,7 @@ between runs. I treat it as a signal, not ground truth, and always show the rule
 next to it.
 
 **How do you test code that calls LLMs?**
-A fake LLM in `tests/conftest.py` replaces the network calls and records what was sent, so 103
+A fake LLM in `tests/conftest.py` replaces the network calls and records what was sent, so 117
 tests run offline in about 10 seconds. That lets me test things like "free mode never calls
 Gemini" or "a failed check escalates without a judge call". A separate browser test drives the
 real UI against a real backend. The eval script is kept apart from the tests because it

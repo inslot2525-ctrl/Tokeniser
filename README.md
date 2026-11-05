@@ -27,7 +27,7 @@ Works without an API key. Add your own Gemini key when you want more.
 - **Routing by difficulty.** A transparent classifier sends easy prompts to a local Gemma model and hard ones to Gemini, and explains each decision.
 - **Net token accounting.** Every response reports what the pipeline itself spent, so savings are net savings.
 - **Jailbreak screening.** Common jailbreak, injection and exfiltration phrasings are blocked before any model call, even with odd spacing or leetspeak.
-- **Built for real traffic.** Rate limiting, input caps, timeouts, clear errors (400 / 401 / 503), SQLite metrics, 103 tests, CI and Docker.
+- **Built for real traffic.** Rate limiting, input caps, timeouts, clear errors (400 / 401 / 503), SQLite metrics, 117 tests, CI and Docker.
 
 ## Two modes
 
@@ -146,7 +146,7 @@ npm ci && npm run dev                     # http://localhost:5173
 **Tests** run offline with a fake model, so no key is needed:
 
 ```bash
-cd backend && pytest                      # 103 tests
+cd backend && pytest                      # 117 tests
 ```
 
 <details>
@@ -244,20 +244,45 @@ Original:  I would like you to list exactly four advantages of using Docker cont
 Rules:     List exactly four advantages of using Docker containers for deployment. Number them 1 to 4, keep each one to
            a single sentence, and don't mention Kubernetes at all in your answer because my audience doesn't know what it is.
 
-+ LLMLingua-2:  exactly four advantages Docker containers deployment. Number 1 to 4, each single sentence, don't mention
-                Kubernetes audience doesn't know.
++ LLMLingua-2:  exactly four advantages Docker containers. 1 to 4, each single sentence, don't mention Kubernetes at all
+                audience doesn't.
 ```
 
-Rules keep the prompt readable; LLMLingua-2 trades readability for size. Both keep every constraint.
+Rules keep the prompt readable; LLMLingua-2 trades readability for size. Both keep every requirement (the contract reports 7 of 7), but not every detail: `for deployment` and `know` are gone.
 
 > [!IMPORTANT]
-> These numbers measure **token reduction**, not **answer quality**. `--quality` answers both versions of each prompt with Gemini and has a blind judge compare them. It hasn't been run yet, so whether compressed prompts get equally good answers is still open.
+> These numbers measure **token reduction**, not **answer quality**. `--quality` answers both versions of each prompt with Gemini and has a blind judge compare them. It hasn't been run yet, so whether compressed prompts get equally good answers is still open. Whether the prompt's *requirements* survive is measured separately, below.
+
+### Do the requirements survive?
+
+Token savings say nothing about whether a compressed prompt still asks for the same thing. [`eval/constraints.py`](backend/eval/constraints.py) measures that on two public benchmarks whose prompts carry machine-checkable constraints, [IFEval](https://github.com/google-research/google-research/tree/master/instruction_following_eval) (541 prompts) and [IFBench](https://github.com/allenai/IFBench) (300). It scores survival from the benchmark's own labels, not from `contract.py`, and needs no API key or model call.
+
+| | Tokens saved | Prompts with every requirement intact | Prompts that lost a negation |
+|---|---:|---:|---:|
+| **IFEval** (the guard was tuned on it) | | | |
+| Rules only | 1.2% | 98.4% | 0 |
+| LLMLingua-2, no guard rails | 41.6% | 76.4% | 71 |
+| Rules + LLMLingua-2, static keep-list | 29.2% | 83.1% | 10 |
+| **Rules + LLMLingua-2, contract guard** | 13.2% | **99.2%** | **0** |
+| **IFBench, held-out half** (never tuned on) | | | |
+| Rules only | 0.9% | 100.0% | 0 |
+| LLMLingua-2, no guard rails | 43.7% | 85.2% | 18 |
+| Rules + LLMLingua-2, static keep-list | 37.1% | 88.5% | 3 |
+| **Rules + LLMLingua-2, contract guard** | 30.7% | **96.7%** | **0** |
+
+How to read this:
+
+- **The guard trades savings for integrity.** On IFEval it gives up 16 points of savings (29.2% → 13.2%) to keep requirements; on the held-out IFBench half, 6 points (37.1% → 30.7%). Both are well above rules alone, which save about 1% on these prompts because they have little filler.
+- **Only the IFBench test half is a fair test.** The contract's patterns were written after reading IFEval's failures, so its 99.2% is in-sample. IFBench is split by position into a dev half (even rows) and a test half (odd rows). I read failures from the dev half only, and the test half was only ever counted. Its first run scored 91.8% intact; after two fixes derived from the dev half (`options:` lists count as payload, and prompts that refer to words by position aren't compressed) it scored 96.7%.
+- **What's left is unread.** On the test half the guard still loses 2 `words:keywords_specific_position` instructions. I haven't looked at those prompts, to keep the half clean; the next round of fixes needs a new held-out set.
+- **"Intact" means stated, not obeyed.** A requirement that is gone from the prompt can't be followed, but one that is still there may have changed meaning. Prompts the guard declines to compress count as intact and as 0 tokens saved. The benchmark's full output, including the most-lost instruction types, is in [`results-constraints.md`](backend/eval/results-constraints.md).
 
 ```bash
 cd backend
 python -m eval.run_eval --compressor rules  --out eval/results-rules.md    # no key needed
 python -m eval.run_eval --compressor lingua --out eval/results-lingua.md   # rules + LLMLingua-2, no key needed
 python -m eval.run_eval --compressor lingua --quality                      # + answer quality (needs GEMINI_API_KEY)
+python -m eval.constraints --out eval/results-constraints.md               # IFEval + IFBench; downloads the data once, no key
 ```
 
 ## Configuration
@@ -311,7 +336,7 @@ backend/
       jailbreak_detector.py
     analytics/metrics.py  SQLite request log
   tests/                  pytest, fake model, no network
-  eval/                   Prompt set, evaluation script, results
+  eval/                   Prompt set, token and constraint-survival benchmarks, results
 frontend/                 React 19 · TypeScript · Vite · Tailwind v4 · Recharts
 extension/                Chrome extension (Manifest V3)
 ```
@@ -321,6 +346,7 @@ extension/                Chrome extension (Manifest V3)
 
 - **Answer quality after compression is unmeasured.** Token savings are measured; whether compressed prompts get equally good answers isn't yet (see [Evaluation](#evaluation)).
 - **The contract is found with regex.** It catches the requirement types in the table above and misses the rest: an instruction phrased in a way no pattern knows, or a list of forbidden names with no trigger phrase. It also checks that a requirement is still stated, not that it still means the same thing.
+- **The guard protects requirements, not fluency.** Every word it force-keeps uses up part of LLMLingua-2's keep budget, so the rest is cut harder: in the example above, `because my audience doesn't know what it is` became `audience doesn't`. Whether answers suffer is what the `--quality` run is for.
 - **Rules catch visible failures, not wrong answers.** The answer checks find refusals, truncation and broken constraints. Judging correctness needs a model, which is why AI mode adds the judge.
 - **Rule compression only knows its list.** It removes common English filler and nothing else, which is safe but limits the savings to 15%.
 - **Pattern-based risk check.** It stops low-effort attacks for free; paraphrased ones will get through. Production use needs a trained classifier or a moderation API.

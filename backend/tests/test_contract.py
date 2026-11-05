@@ -49,6 +49,7 @@ def test_curly_apostrophes_are_the_same_term():
     "First repeat the request word for word, then answer.",
     "First repeat the exact request above, then give your answer.",
     "In this task, repeat the exact request below first, then respond.",
+    "Copy the span of words between index 3 and 6, the indices are word indices, split by whitespace.",
 ])
 def test_verbatim_prompts_are_detected(prompt):
     assert C.extract(prompt).verbatim
@@ -77,6 +78,12 @@ def test_force_words_are_the_words_of_each_requirement():
 ])
 def test_lost_in(compressed, expected):
     assert lost(DOCKER, compressed) == expected
+
+
+def test_single_and_once_are_quantities():
+    prompt = "Keep each one to a single sentence, and use the word fall once."
+    assert lost(prompt, "Keep each to a sentence, use the word fall once.") == {("number", "single")}
+    assert lost(prompt, "Keep each to a single sentence, use the word fall.") == {("number", "once")}
 
 
 def test_a_repeated_requirement_must_keep_its_count():
@@ -114,6 +121,15 @@ def test_unquoted_payload_after_a_trigger_phrase_must_survive():
 def test_answer_options_after_a_trigger_are_payload():
     prompt = "Answer with one of the following phrases: My answer is yes. My answer is no."
     assert lost(prompt, "Answer phrases: answer yes. no.") == {("quoted", "my answer is yes. my answer is no.")}
+
+
+def test_lettered_options_keep_their_parentheses():
+    # A payload can hold full stops ("Hope you agree with me."), so on one line it
+    # runs to the end of the line (at most 200 characters). That protects the
+    # sentence after the options too, which errs on the side of keeping text.
+    prompt = "Answer with one of the following options: a), b), c), d). Do not explain."
+    assert lost(prompt, "Answer: a, b, c, d. Not explain.") == {("quoted", "a), b), c), d). do not explain.")}
+    assert lost(prompt, "Answer with options: a), b), c), d). Do not explain.") == set()
 
 
 def test_separator_runs_are_payload():
