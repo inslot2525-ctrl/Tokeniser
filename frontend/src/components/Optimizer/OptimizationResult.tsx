@@ -41,7 +41,13 @@ export default function OptimizationResult({ result }: Props) {
       {/* How it was compressed */}
       <div className="rounded-2xl border border-white/10 bg-[#101010] px-6 py-4 text-sm">
         <p className="text-gray-400">
-          Compressed with <span className="font-semibold text-white">{result.method}</span>
+          {result.method === "None" ? (
+            <span className="font-semibold text-white">Sent as written</span>
+          ) : (
+            <>
+              Compressed with <span className="font-semibold text-white">{result.method}</span>
+            </>
+          )}
           {" · "}
           <span className="text-green-400">0 API tokens spent</span>
         </p>
