@@ -11,6 +11,8 @@ Each pattern has a label so the API can say exactly what was removed.
 import re
 from dataclasses import dataclass, field
 
+from app.engine.contract import PAYLOAD
+
 # (label, pattern). Order matters: longer wrappers before the shorter ones
 # they contain. All patterns are case-insensitive.
 FILLER: list[tuple[str, str]] = [
@@ -45,6 +47,12 @@ COMPILED = [(label, re.compile(p, re.I | re.M)) for label, p in FILLER]
 # Code is never touched.
 PROTECTED = re.compile(r"```.*?```|`[^`\n]+`", re.S)
 
+# With protect_quotes, the prompt's payloads (quoted strings, <<titles>>, "end
+# with: ...", see contract.PAYLOAD) are left alone too. They are hidden behind
+# an opaque word while the rules run, so the punctuation around them is tidied
+# normally.
+_HIDDEN = re.compile(r"qzq(\d+)qzq", re.I)
+
 
 @dataclass
 class RuleResult:
@@ -69,7 +77,14 @@ def _tidy(text: str) -> str:
 _ASKED = "\x00"
 
 
-def _compress_prose(text: str, removed: list[dict]) -> str:
+def _compress_prose(text: str, removed: list[dict], protect_quotes: bool = False) -> str:
+    quotes: list[str] = []
+    if protect_quotes:
+        def hide(m):
+            quotes.append(m.group(0))
+            return f"qzq{len(quotes) - 1}qzq"
+        text = PAYLOAD.sub(hide, text)
+
     # Run to a fixed point: removing a greeting can expose another opener.
     for _ in range(3):
         before = text
@@ -83,17 +98,18 @@ def _compress_prose(text: str, removed: list[dict]) -> str:
         if text == before:
             break
     text = re.sub(_ASKED + r"([^.?!]*)\?", r"\1.", text)
-    return _tidy(text.replace(_ASKED, ""))
+    text = _tidy(text.replace(_ASKED, ""))
+    return _HIDDEN.sub(lambda m: quotes[int(m.group(1))], text) if quotes else text
 
 
-def compress(text: str) -> RuleResult:
+def compress(text: str, *, protect_quotes: bool = False) -> RuleResult:
     removed: list[dict] = []
     out, pos = [], 0
     for m in PROTECTED.finditer(text):
-        out.append(_compress_prose(text[pos:m.start()], removed))
+        out.append(_compress_prose(text[pos:m.start()], removed, protect_quotes))
         out.append(m.group(0))
         pos = m.end()
-    out.append(_compress_prose(text[pos:], removed))
+    out.append(_compress_prose(text[pos:], removed, protect_quotes))
 
     result = " ".join(part for part in out if part.strip())
     # Never return something empty or longer than the input.

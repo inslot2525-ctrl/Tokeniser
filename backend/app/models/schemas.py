@@ -25,6 +25,14 @@ class TokenResponse(BaseModel):
     tokens: int
 
 
+class ContractReport(BaseModel):
+    terms: int  # distinct requirements found in the prompt
+    kept: int  # how many of them the optimized prompt still states
+    lost: list[dict] = []  # [{"kind": "negation", "text": "not"}]
+    reverted: list[dict] = []  # what a discarded compression had dropped; empty if none was discarded
+    verbatim: bool = False  # the prompt asks to be reproduced as-is, so it was not compressed
+
+
 class CompressResponse(BaseModel):
     original: str
     optimized: str
@@ -32,5 +40,6 @@ class CompressResponse(BaseModel):
     optimized_tokens: int
     saved_tokens: int
     savings_percent: float
-    method: str  # "Rules" or "Rules + LLMLingua-2"
+    method: str  # "Rules", "Rules + LLMLingua-2", or "None" (sent as written)
     removed_phrases: list[dict] = []
+    contract: ContractReport | None = None  # None when CONTRACT_GUARD is off

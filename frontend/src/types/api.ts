@@ -33,6 +33,20 @@ export interface AnswerChecks {
   issues: string[];
 }
 
+/** What the prompt requires (numbers, negations, "at least", quoted payloads) and
+ * whether the optimized prompt still states it. */
+export interface ContractReport {
+  /** Distinct requirements found in the prompt. */
+  terms: number;
+  /** How many of them the optimized prompt still states. */
+  kept: number;
+  lost: { kind: string; text: string }[];
+  /** What a discarded LLMLingua-2 output had dropped; empty if none was discarded. */
+  reverted: { kind: string; text: string }[];
+  /** The prompt asks to be reproduced as-is, so it was not compressed. */
+  verbatim: boolean;
+}
+
 export interface AgentResponse {
   mode: Mode;
   original_prompt: string;
@@ -48,6 +62,8 @@ export interface AgentResponse {
   response: string | null;
   verification: { score: number; reason: string } | null;
   checks: AnswerChecks | null;
+  /** null when the backend runs with CONTRACT_GUARD=off, or the prompt was blocked. */
+  contract: ContractReport | null;
   risk: RiskResponse;
   analysis: {
     category: string;
@@ -67,9 +83,10 @@ export interface CompressResponse {
   optimized_tokens: number;
   saved_tokens: number;
   savings_percent: number;
-  /** "Rules" or "Rules + LLMLingua-2" */
+  /** "Rules", "Rules + LLMLingua-2", or "None" when the prompt is sent as written */
   method: string;
   removed_phrases: { label: string; text: string }[];
+  contract: ContractReport | null;
 }
 
 // ─── /enhance response ──────────────────────────────────────────────────────

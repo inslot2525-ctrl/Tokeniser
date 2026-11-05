@@ -21,7 +21,7 @@ def fake_lingua(monkeypatch):
     monkeypatch.setattr(config, "COMPRESSOR", "auto")
     monkeypatch.setattr(compressor, "enabled", lambda: True)
     monkeypatch.setattr(
-        compressor, "_compress_prose", lambda text, rate: " ".join(text.split()[::2])
+        compressor, "_compress_prose", lambda text, rate, force_words=(): " ".join(text.split()[::2])
     )
 
 
@@ -59,6 +59,8 @@ def test_clean_rejoins_word_pieces():
     assert compressor.clean("worst case,?") == "worst case?"
     assert compressor.clean("columns customer _ id, created _ at") == "columns customer_id, created_at"
     assert compressor.clean("don t mention it, it doesn t matter") == "don't mention it, it doesn't matter"
+    assert compressor.clean("add a postscript P. S. then P. P. S") == "add a postscript P.S. then P.P.S"
+    assert compressor.clean("Plan A. Then wait.") == "Plan A. Then wait."  # real sentences are untouched
 
 
 def test_rules_then_lingua_calls_no_model(fake_lingua, fake_llm):

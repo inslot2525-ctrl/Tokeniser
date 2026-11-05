@@ -16,7 +16,8 @@ question list to practise.
 > The interesting part is that I **measured my own system**. The first version compressed prompts
 > by asking an LLM to rewrite them, and I found that it spent *more* tokens than it saved. So I
 > replaced it with local compression: rules plus a small on-device model, LLMLingua-2. On my
-> 20-prompt eval that saves **44% of tokens at zero API cost**.
+> 20-prompt eval that saves **43% of tokens at zero API cost**, and it checks that the prompt's
+> requirements (numbers, negations, "at least") survive.
 
 ## 2. The story (use this when asked "tell me about a project")
 
@@ -31,7 +32,11 @@ question list to practise.
 5. **Checking the output.** Reading the compressed prompts showed real problems: identifiers
    split (`customer _ id`), code mangled (`i <= arr.length` became `i < = arr. length`), and
    short prompts losing their verb. I added a fix and a test for each.
-6. **Result.** Rules alone save 15.1%; rules + LLMLingua-2 save 44.4%. Both spend 0 API tokens.
+6. **Result.** Rules alone save 15.1%; rules + LLMLingua-2 save 42.7%. Both spend 0 API tokens.
+7. **The contract.** Token savings said nothing about whether the prompt still *asked for the same
+   thing*, so I added a contract: list a prompt's numbers, negations, limits and must-reproduce
+   text, protect them, and throw the compression away if one is lost. It cost 1.7 points of
+   savings on my own eval.
 
 The lesson to say out loud: *"Measure the whole system, including your own overhead, not just
 the part that looks good."*
@@ -52,7 +57,7 @@ Browser (React)  --POST /agent {prompt, mode}-->  FastAPI backend
 ```
 
 The whole pipeline is one function, `run_agent()` in `backend/app/engine/agent.py`, and its five
-steps are numbered in the code. The backend's app code is about 1,200 lines.
+steps are numbered in the code. The backend's app code is about 1,300 lines.
 
 ## 4. Each component in two or three sentences
 
@@ -60,19 +65,23 @@ steps are numbered in the code. The backend's app code is about 1,200 lines.
 |---|---|---|---|
 | **Risk check** | `jailbreak_detector.py` | 13 regex patterns (jailbreak, injection, data exfiltration) run on normalised text: lower-cased, leetspeak undone (`1gn0re` → `ignore`), punctuation removed. Two or more matches, or any exfiltration match, means HIGH, and the prompt is blocked before any model call. | Free and instant. A first-line filter, not a real classifier. |
 | **Rule compressor** | `rule_compressor.py` | 21 regex patterns for filler (greetings, "could you please", sign-offs, hedges). Reports every phrase it removed, and turns "Could you explain X?" into "Explain X.". | It only deletes what's on the list, so it **can't** drop "not" or a number. Runs in under 1 ms, so it works on any host. |
-| **LLMLingua-2** | `compressor.py` | A small BERT model (~700 MB) scores each token and keeps the most informative 60%. Constraint words ("not", "exactly", "must") and numbers are force-kept; code is never touched; prompts under 40 tokens are skipped. | Bigger savings than rules, still 0 API tokens. Optional, because it needs ~1.5 GB of RAM. |
-| **Classifier / router** | `complexity.py`, `router.py` | Scores the prompt on length, task type (code, math…), "deep reasoning" keywords and number of questions. Easy/Medium → local model, Hard → Gemini. | Explainable and free. The first version paid Gemini to decide whether to use Gemini. |
+| **Contract** | `contract.py` | Reads the prompt and lists what it requires: numbers, negations, "at least"-style relations, and text the answer must reproduce (quoted strings, `<<titles>>`, the text after "end with:"). After compression it checks each one is still stated. | Compressors report tokens removed, not whether the prompt still asks for the same thing. Regex, so it's free, but it checks that a requirement is *stated*, not that it still *means* the same. |
+| **LLMLingua-2** | `compressor.py` | A small BERT model (~700 MB) scores each token and keeps the most informative 60%. The prompt's own requirement words (from the contract) are force-kept, payloads pass through untouched, code is never touched; prompts under 40 tokens are skipped. If it still drops a number, negation, relation or payload, its output is discarded and only the rules' result is used. | Bigger savings than rules, still 0 API tokens. Optional, because it needs ~1.5 GB of RAM. |
+| **Classifier / router** | `complexity.py`, `router.py` | Scores the **original** prompt on length, task type (code, math…), "deep reasoning" keywords and number of questions. Easy/Medium → local model, Hard → Gemini. | Explainable and free. It reads the original because compression can delete the words ("step by step") that mark a prompt as hard. |
 | **LLM clients** | `llm.py` | Talks to Ollama and Gemini, and records the tokens of every call. Each request runs inside a `session()` that says whether Gemini may be used and with which key. | Per-request key handling without passing the key through every function. |
 | **Answer checks** | `answer_checks.py` | Rules that catch visibly bad answers: empty, refusal, cut-off code, missing code, "exactly four" answered with five items, wrong sentence count, a word the prompt said not to mention. Always checked against the **original** prompt. | Free. A failed check sends a local answer straight to Gemini without paying for a judge. |
-| **Judge** | `verifier.py` | AI mode only: Gemini scores a local answer 0–10, and below 8 the prompt is re-answered by Gemini. | Catches *wrong* answers, which rules can't. Only runs when the cheap checks pass. |
+| **Judge** | `verifier.py` | AI mode only: Gemini scores a local answer 0–10 **against the original prompt**, and below 8 the prompt is re-answered by Gemini. | Catches *wrong* answers, which rules can't. Only runs when the cheap checks pass. Judging against the compressed prompt would hide any requirement that compression dropped. |
 | **Security** | `api/security.py`, `models/schemas.py` | Per-IP rate limit (20/min), 8,000-character prompt cap, optional server API key, 60 s timeouts on model calls. | Basic abuse protection for a public demo. |
 
 ## 5. Numbers to remember
 
-- **44.4%** of tokens saved with rules + LLMLingua-2 (473 of 1,065 on 20 prompts); **15.1%** with rules alone.
+- **42.7%** of tokens saved with rules + LLMLingua-2 (455 of 1,065 on 20 prompts); **15.1%** with rules alone.
 - **0** API tokens spent on compression.
 - **0 to 3** LLM calls per request: 0 in free mode without Ollama, up to 3 in AI mode (answer, judge, retry).
-- **61** backend tests (no network needed), plus a 13-check browser test.
+- **117** backend tests (no network needed), plus a 13-check browser test.
+- **Constraint survival** (IFBench, held-out half, 150 prompts): LLMLingua-2 alone leaves **85%** of
+  prompts with every requirement intact and loses a negation in 18 of them. With the contract
+  guard: **96.7%** intact, **0** negations lost, at 30.7% tokens saved instead of 43.7%.
 - JavaScript bundle reduced from **834 KB to 342 KB** by removing unused features.
 
 ## 6. Likely questions, with answers
@@ -88,13 +97,33 @@ model often kept things like "Thank you!". After the rules, a chatty prompt is
 often under 40 tokens, so LLMLingua-2 is skipped. That's deliberate: on short prompts it drops
 the instruction itself.
 
+**How do you stop compression dropping something the prompt required?**
+The prompt has a *contract*: I list its numbers, negations, "at least"-style relations and any
+text the answer must reproduce, before compressing. Four things follow from that. The
+requirement words are force-kept by LLMLingua-2, built from that prompt rather than a fixed
+list. Payloads (quoted strings, "end with: ...") skip compression. A prompt that says "repeat
+the request word for word" isn't compressed at all. And after compression I check the contract
+again: if LLMLingua-2 still lost a number, negation, relation or payload, I throw its output
+away and keep only the rule-based filler removal. The weakness to admit: it's regex, and it
+checks a requirement is still *stated*, not that it still *means* the same.
+
+**How do you know the contract guard works, and isn't just tuned to your test?**
+I measured it on two public benchmarks whose prompts carry machine-checkable constraints,
+IFEval and IFBench, and scored from the benchmark's own labels rather than my code. I was
+careful about one thing: the patterns in my contract were written after reading IFEval's
+failures, so IFEval's 99% is in-sample. IFBench has different constraint types, so I split it by
+position, read failures from one half only, and only ever *counted* the other. On that held-out
+half the guard went from 88.5% of prompts intact (no guard) to 96.7%, with no negation lost.
+The first held-out run was 91.8%; two fixes I derived from the dev half moved it to 96.7%.
+What I'd say about the limits: it measures that a requirement is still *stated*, not that a
+model obeys it, and the guard costs savings (37% down to 31% on the held-out half).
+
 **How do you know compression doesn't make the answers worse?**
-Three safeguards: constraint words and numbers are force-kept, code is never compressed, and
-the answer checks always use the *original* prompt, so a constraint lost to compression would
-still be caught in the answer. For measurement, the eval has a `--quality` mode: it answers both
-versions with Gemini and has a blind judge compare them. *(Say the result here once you've run
-it. Until then, be honest: "token savings are measured; quality is the next thing I'm
-measuring".)*
+Two layers. The contract check above guards the prompt, and the answer checks and the judge
+always use the *original* prompt, so a requirement lost to compression is still checked in the
+answer. For measurement, the eval has a `--quality` mode: it answers both versions with Gemini
+and has a blind judge compare them. *(Say the result here once you've run it. Until then, be
+honest: "token savings are measured; quality is the next thing I'm measuring".)*
 
 **How do you keep the user's API key safe?**
 It's stored only in the user's browser, in session storage by default so it's cleared when the
@@ -131,7 +160,7 @@ between runs. I treat it as a signal, not ground truth, and always show the rule
 next to it.
 
 **How do you test code that calls LLMs?**
-A fake LLM in `tests/conftest.py` replaces the network calls and records what was sent, so 61
+A fake LLM in `tests/conftest.py` replaces the network calls and records what was sent, so 117
 tests run offline in about 10 seconds. That lets me test things like "free mode never calls
 Gemini" or "a failed check escalates without a judge call". A separate browser test drives the
 real UI against a real backend. The eval script is kept apart from the tests because it

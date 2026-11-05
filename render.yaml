@@ -1,0 +1,18 @@
+# Render Blueprint: New > Blueprint > pick this repo. Free plan = 512 MB, so this
+# is the rules-only image; see the README for the LLMLingua-2 build.
+services:
+  - type: web
+    name: tokenwise-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Your frontend's URL, e.g. https://your-app.vercel.app (no trailing slash).
+      - key: CORS_ORIGINS
+        sync: false
+      # No GEMINI_API_KEY on purpose: AI mode uses each visitor's own key.
+      - key: COMPRESSOR
+        value: rules

@@ -25,3 +25,6 @@ Thumbs.db
 # Local data
 *.db
 *.log
+
+# Benchmark data, downloaded on first use by eval/constraints.py
+backend/eval/data/
